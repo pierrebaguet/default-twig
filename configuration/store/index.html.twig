@@ -149,6 +149,13 @@
                             {{ form_row(form.admin_two_factor_required, { attr: { 'data-testid': 'config-store-admin-two-factor-required' } }) }}
                         </div>
                     </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header">{{ 'Product videos'|trans }}</div>
+                        <div class="card-body">
+                            {{ form_row(form.video_providers, { attr: { 'data-testid': 'config-store-video-providers' } }) }}
+                        </div>
+                    </div>
                 </div>
             </div>
 

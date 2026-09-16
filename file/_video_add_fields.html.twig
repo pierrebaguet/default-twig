@@ -1,0 +1,39 @@
+{% form_theme form with bo_form_themes only %}
+{{ form_start(form, {
+    action: path('admin.video.save-ajax', { productId: product_id }),
+    method: 'post',
+    attr: { 'data-testid': 'bo-video-add-form', enctype: 'multipart/form-data', 'data-action': 'submit->bo-video-form#submit' },
+}) }}
+    <input type="hidden" name="_token" value="{{ assignToken() }}">
+
+    {{ form_errors(form) }}
+
+    <div class="row g-3 align-items-start">
+        <div class="col-md-5">
+            {{ form_label(form.url) }}
+            {{ form_widget(form.url, { attr: { class: 'form-control', placeholder: 'https://', 'data-testid': 'bo-video-url' } }) }}
+            {{ form_errors(form.url) }}
+            {{ form_help(form.url) }}
+        </div>
+        <div class="col-md-3">
+            {{ form_label(form.file) }}
+            {{ form_widget(form.file, { attr: { class: 'form-control', 'data-testid': 'bo-video-file' } }) }}
+            {{ form_errors(form.file) }}
+        </div>
+        <div class="col-md-3">
+            {{ form_label(form.title) }}
+            {{ form_widget(form.title, { attr: { class: 'form-control', 'data-testid': 'bo-video-title' } }) }}
+        </div>
+        <div class="col-md-1">
+            <span class="form-label d-block" aria-hidden="true">&nbsp;</span>
+            <button type="submit" class="btn btn-primary w-100" data-testid="bo-video-add-submit">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="form-check mt-2">
+        {{ form_widget(form.visible, { attr: { class: 'form-check-input', 'data-testid': 'bo-video-visible' } }) }}
+        {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
+    </div>
+{{ form_end(form) }}

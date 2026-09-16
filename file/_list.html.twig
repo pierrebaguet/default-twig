@@ -21,7 +21,7 @@
                         {% if kind == 'image' %}
                             <a href="{{ path(urls.update, { parentType: parent_type, imageId: item.id }) }}"
                                class="d-flex align-items-center justify-content-center bg-light p-2" style="height: 140px;" data-testid="bo-file-thumb">
-                                <img src="{{ item.url }}" alt="{{ item.title }}" class="img-fluid" style="max-height: 100%;">
+                                <img src="{{ item.url }}" alt="{{ item.resolved_alt|default('') }}" class="img-fluid" style="max-height: 100%;">
                             </a>
                         {% else %}
                             <a href="{{ path(urls.update, { parentType: parent_type, documentId: item.id }) }}"
@@ -33,13 +33,43 @@
                         <div class="card-body p-2 d-flex flex-column">
                             {% if can_update %}
                                 <form method="post" action="{{ path(urls.update_title, kind == 'image' ? { parentType: parent_type, imageId: item.id } : { parentType: parent_type, documentId: item.id }) }}"
-                                      class="input-group input-group-sm mb-2" data-testid="bo-file-title-form-{{ item.id }}">
+                                      class="mb-2" data-testid="bo-file-title-form-{{ item.id }}">
                                     <input type="hidden" name="_token" value="{{ assignToken() }}">
                                     <input type="hidden" name="success_url" value="">
-                                    <input type="text" name="title" value="{{ item.title }}" class="form-control" placeholder="{{ 'Title'|trans }}">
-                                    <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}">
-                                        <i class="bi bi-check2" aria-hidden="true"></i>
-                                    </button>
+                                    <div class="input-group input-group-sm{% if kind == 'image' %} mb-2{% endif %}">
+                                        <input type="text" name="title" value="{{ item.title }}" class="form-control" placeholder="{{ 'Title'|trans }}"
+                                               aria-label="{{ 'Title'|trans }}" data-testid="bo-file-title-input-{{ item.id }}">
+                                        {% if kind != 'image' %}
+                                            <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}">
+                                                <i class="bi bi-check2" aria-hidden="true"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                    {% if kind == 'image' %}
+                                        <div class="input-group input-group-sm mb-1">
+                                            <input type="text" name="alt" value="{{ item.alt|default('') }}" class="form-control"
+                                                   placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}"
+                                                   data-action="input->bo-file-list#refreshAltWarning"
+                                                   data-testid="bo-file-alt-input-{{ item.id }}"
+                                                   {% if item.decorative|default(false) %}disabled{% endif %}>
+                                            <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}"
+                                                    data-testid="bo-file-inline-save-{{ item.id }}">
+                                                <i class="bi bi-check2" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                        <div class="form-check form-check-inline small">
+                                            <input class="form-check-input" type="checkbox" name="decorative" value="1"
+                                                   id="decorative-{{ parent_type }}-{{ item.id }}"
+                                                   data-action="bo-file-list#toggleDecorative"
+                                                   data-testid="bo-file-decorative-{{ item.id }}"
+                                                   {% if item.decorative|default(false) %}checked{% endif %}>
+                                            <label class="form-check-label" for="decorative-{{ parent_type }}-{{ item.id }}">{{ 'Decorative image'|trans }}</label>
+                                        </div>
+                                        <div class="small text-warning-emphasis{% if item.decorative|default(false) or item.alt|default('') is not empty %} d-none{% endif %}"
+                                             data-alt-warning data-testid="bo-file-alt-warning-{{ item.id }}">
+                                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ 'No alternative text'|trans }}
+                                        </div>
+                                    {% endif %}
                                 </form>
                             {% else %}
                                 <div class="small fw-semibold text-truncate mb-2">{{ item.title }}</div>

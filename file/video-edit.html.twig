@@ -1,32 +1,22 @@
 {% extends '@BackOfficeDefaultTwig/base.html.twig' %}
 
-{% block title %}{{ 'Edit an image'|trans }} - {{ file_title }}{% endblock %}
-{% block body_testid %}file-image-edit-page{% endblock %}
+{% block title %}{{ 'Edit a video'|trans }} - {{ video_title }}{% endblock %}
+{% block body_testid %}file-video-edit-page{% endblock %}
 
 {% block breadcrumb %}
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
-            <li class="breadcrumb-item"><a href="{{ close_url }}">{{ ('Edit '~parent_type)|trans }}</a></li>
-            <li class="breadcrumb-item active" aria-current="page">{{ 'Editing image "%name"'|trans({ '%name': file_title }) }}</li>
+            <li class="breadcrumb-item"><a href="{{ close_url }}">{{ 'Edit product'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Editing video "%name"'|trans({ '%name': video_title }) }}</li>
         </ol>
     </nav>
 {% endblock %}
 
 {% block content %}
-    {{ safe_hook('image-edit.top', { image_id: file_id, type: parent_type }) }}
-
-    <div class="container-fluid" data-testid="image-edit-page">
+    <div class="container-fluid" data-testid="video-edit-page">
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-            <h1 class="h3 mb-0">{{ 'Edit image "%name"'|trans({ '%name': file_title }) }} <small class="text-muted">#{{ file_id }}</small></h1>
-            <div class="btn-group">
-                <a class="btn btn-outline-secondary" href="{{ previous_url ?: '#' }}" {% if not previous_url %}aria-disabled="true" tabindex="-1"{% endif %} title="{{ 'Edit previous image'|trans }}" data-testid="bo-image-edit-previous">
-                    <i class="bi bi-arrow-left" aria-hidden="true"></i>
-                </a>
-                <a class="btn btn-outline-secondary" href="{{ next_url ?: '#' }}" {% if not next_url %}aria-disabled="true" tabindex="-1"{% endif %} title="{{ 'Edit next image'|trans }}" data-testid="bo-image-edit-next">
-                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
-                </a>
-            </div>
+            <h1 class="h3 mb-0">{{ 'Edit video "%name"'|trans({ '%name': video_title }) }} <small class="text-muted">#{{ video_id }}</small></h1>
         </div>
 
         <div class="mb-3">
@@ -36,10 +26,9 @@
         <div class="card">
             <div class="card-body">
                 {% form_theme form with bo_form_themes only %}
-                {{ form_start(form, { action: edit_url, method: 'post', attr: { 'data-testid': 'bo-image-edit-form' } }) }}
+                {{ form_start(form, { action: edit_url, method: 'post', attr: { 'data-testid': 'bo-video-edit-form' } }) }}
                     {{ form_widget(form.id) }}
                     {{ form_widget(form.locale) }}
-                    {{ form_widget(form.success_url) }}
 
                     {% include '@BackOfficeDefaultTwig/components/SaveModeToolbar/SaveModeToolbar.html.twig' with {
                         closeUrl: close_url,
@@ -56,58 +45,51 @@
                         showSaveClose: true,
                         align: 'end',
                         wrapperClass: 'mb-3',
-                        testid: 'bo-image-edit',
+                        testid: 'bo-video-edit',
                     } only %}
 
-                    <h2 class="h5 mb-3">{{ 'Image information'|trans }}</h2>
+                    <h2 class="h5 mb-3">{{ 'Video information'|trans }}</h2>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">{{ 'Preview'|trans }}</label>
+                            <label class="form-label">{{ 'Thumbnail'|trans }}</label>
                             <div class="bg-light text-center p-3 rounded">
-                                {% if file_url %}
-                                    <a href="{{ file_url }}" target="_blank" rel="noopener" data-testid="bo-image-preview">
-                                        <img src="{{ file_url }}" alt="{{ file_alt }}" class="img-fluid" style="max-height: 320px;">
-                                    </a>
+                                {% if thumbnail_url %}
+                                    <img src="{{ thumbnail_url }}" alt="" class="img-fluid" style="max-height: 320px;" data-testid="bo-video-edit-thumbnail">
                                 {% else %}
-                                    <div class="text-muted">{{ 'Image file not found'|trans }}</div>
+                                    <div class="text-muted">{{ 'No product image to use as a thumbnail'|trans }}</div>
                                 {% endif %}
                             </div>
-                            {% if file_name %}
-                                <div class="form-text text-truncate"><i class="bi bi-file-earmark-image" aria-hidden="true"></i> {{ file_name }}</div>
-                            {% endif %}
-                            {% if file_inherited|default(false) %}
-                                <div class="form-text" data-testid="bo-image-inherited-file">{{ 'This language has no image of its own: the image of the default language is shown.'|trans }}</div>
-                            {% endif %}
+                            <div class="form-text">
+                                {% if hosted %}
+                                    <i class="bi bi-film" aria-hidden="true"></i> {{ 'Hosted by the shop'|trans }}
+                                {% else %}
+                                    <i class="bi bi-play-btn" aria-hidden="true"></i> {{ 'Played from %platform'|trans({ '%platform': provider }) }}
+                                {% endif %}
+                            </div>
+
+                            <div class="mb-3 mt-3">
+                                {{ form_label(form.thumbnail_image_id) }}
+                                {{ form_widget(form.thumbnail_image_id, { attr: { class: 'form-select', 'data-testid': 'bo-video-edit-thumbnail-choice' } }) }}
+                                {{ form_help(form.thumbnail_image_id) }}
+                            </div>
                         </div>
 
                         <div class="col-md-6">
-                            <div class="mb-3">
-                                {{ form_label(form.file) }}
-                                {{ form_widget(form.file, { attr: { class: 'form-control' } }) }}
-                                <div class="form-text">{{ 'The file is used for the language being edited only.'|trans }}</div>
-                            </div>
-
                             <div class="form-check mb-3">
-                                {{ form_widget(form.visible, { attr: { class: 'form-check-input' } }) }}
+                                {{ form_widget(form.visible, { attr: { class: 'form-check-input', 'data-testid': 'bo-video-edit-visible' } }) }}
                                 {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
                             </div>
 
                             <div class="mb-3">
                                 {{ form_label(form.title) }}
-                                {{ form_widget(form.title, { attr: { class: 'form-control' } }) }}
+                                {{ form_widget(form.title, { attr: { class: 'form-control', 'data-testid': 'bo-video-edit-title' } }) }}
                             </div>
 
                             <div class="mb-3">
                                 {{ form_label(form.alt) }}
-                                {{ form_widget(form.alt, { attr: { class: 'form-control', 'data-testid': 'bo-image-edit-alt' } }) }}
+                                {{ form_widget(form.alt, { attr: { class: 'form-control', 'data-testid': 'bo-video-edit-alt' } }) }}
                                 {{ form_help(form.alt) }}
-                            </div>
-
-                            <div class="form-check mb-3">
-                                {{ form_widget(form.decorative, { attr: { class: 'form-check-input', 'data-testid': 'bo-image-edit-decorative' } }) }}
-                                {{ form_label(form.decorative, null, { label_attr: { class: 'form-check-label' } }) }}
-                                {{ form_help(form.decorative) }}
                             </div>
 
                             <div class="mb-3">
@@ -144,18 +126,15 @@
                         showSaveClose: true,
                         align: 'end',
                         wrapperClass: 'mt-3',
-                        testid: 'bo-image-edit-bottom',
+                        testid: 'bo-video-edit-bottom',
                     } only %}
 
                 {{ form_end(form) }}
             </div>
         </div>
     </div>
-
-    {{ safe_hook('image-edit.bottom', { image_id: file_id, type: parent_type }) }}
 {% endblock %}
 
 {% block scripts_extra %}
-    {{ safe_hook('image.edit-js', { location: 'image-edit-js', source: parent_type, type: parent_type, image_id: file_id }) }}
-    {{ safe_hook('wysiwyg.js', { location: 'wysiwyg-image-edit-js' }) }}
+    {{ safe_hook('wysiwyg.js', { location: 'wysiwyg-video-edit-js' }) }}
 {% endblock %}

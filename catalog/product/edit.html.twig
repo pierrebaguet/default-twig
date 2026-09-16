@@ -72,6 +72,9 @@
                 <button class="nav-link {% if current_tab == 'documents' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-documents" type="button" data-testid="product-tab-documents">{{ 'Documents'|trans }}</button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link {% if current_tab == 'videos' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-videos" type="button" data-testid="product-tab-videos">{{ 'Videos'|trans }}</button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link {% if current_tab == 'seo' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-seo" type="button" data-testid="product-tab-seo">{{ 'SEO'|trans }}</button>
             </li>
             {% for block in extra_tabs %}
@@ -222,6 +225,10 @@
 
             <div class="tab-pane fade {% if current_tab == 'documents' %}show active{% endif %}" id="tab-documents" role="tabpanel">
                 {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'product', parentId: product.id })) }}
+            </div>
+
+            <div class="tab-pane fade {% if current_tab == 'videos' %}show active{% endif %}" id="tab-videos" role="tabpanel">
+                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\VideoController::videoForm', { productId: product.id })) }}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'seo' %}show active{% endif %}" id="tab-seo" role="tabpanel">

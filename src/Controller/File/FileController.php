@@ -44,6 +44,9 @@ use Thelia\Core\File\Service\FileProcessorService;
 use Thelia\Core\File\Service\FileVisibilityService;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Domain\Media\AltTextResolver;
+use Thelia\Domain\Media\DTO\ImageUpdateDTO;
+use Thelia\Domain\Media\MediaFacade;
 use Thelia\Model\LangQuery;
 use Thelia\Tools\TokenProvider;
 use Twig\Environment;
@@ -68,6 +71,8 @@ final class FileController
         private readonly EditLocaleResolver $editLocale,
         private readonly TokenProvider $tokens,
         private readonly RequestStack $requestStack,
+        private readonly MediaFacade $media,
+        private readonly AltTextResolver $altText,
     ) {
     }
 
@@ -114,10 +119,44 @@ final class FileController
         return $this->handlePosition('image', $parentType, $request, TheliaEvents::IMAGE_UPDATE_POSITION);
     }
 
+    // `update-title` stays as an alias of the same method: the inline form now also
+    // carries the alternative text and the decorative flag, but links and modules
+    // built against the title-only endpoint keep working.
+    #[Route('/admin/image/type/{parentType}/{imageId}/update-inline', name: 'admin.image.update-inline', methods: ['POST'], requirements: ['imageId' => '\d+', 'parentType' => '.+'])]
     #[Route('/admin/image/type/{parentType}/{imageId}/update-title', name: 'admin.image.update-title', methods: ['POST'], requirements: ['imageId' => '\d+', 'parentType' => '.+'])]
-    public function imageUpdateTitle(string $parentType, int $imageId, Request $request): Response
+    public function imageUpdateInline(string $parentType, int $imageId, Request $request): Response
     {
-        return $this->handleUpdateTitle('image', $parentType, $imageId, $request, TheliaEvents::IMAGE_UPDATE);
+        $resource = $this->resources->getResource($parentType);
+        if ($denied = $this->access->check($resource, [], AccessManager::UPDATE)) {
+            return $denied;
+        }
+
+        $this->checkCsrf();
+
+        $model = $this->loadFileModel('image', $parentType, $imageId);
+        if ($model === null) {
+            return new JsonResponse(['error' => $this->translator->trans('File not found.')], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $this->media->updateImage($model, new ImageUpdateDTO(
+                locale: $this->editLocale->resolveFromRequest($request)->getLocale() ?? 'en_US',
+                title: trim((string) $request->request->get('title', '')),
+                // A decorative image disables its alt field, which then posts nothing:
+                // null keeps the text the merchant had written, for the day the box
+                // is unticked again.
+                alt: $request->request->has('alt') ? trim((string) $request->request->get('alt', '')) : null,
+                decorative: $request->request->getBoolean('decorative'),
+            ));
+        } catch (\Throwable $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        if ($request->isXmlHttpRequest()) {
+            return new JsonResponse(['status' => 'ok']);
+        }
+
+        return new RedirectResponse($request->headers->get('referer') ?? $this->urls->generate('admin.home'));
     }
 
     #[Route('/admin/image/type/{parentType}/{imageId}/update', name: 'admin.image.update.view', methods: ['GET'], requirements: ['imageId' => '\d+', 'parentType' => '.+'])]
@@ -220,7 +259,10 @@ final class FileController
             'postscriptum' => method_exists($model, 'getPostscriptum') ? (string) $model->getPostscriptum() : '',
             'description' => method_exists($model, 'getDescription') ? (string) $model->getDescription() : '',
             'visible' => method_exists($model, 'getVisible') ? (bool) $model->getVisible() : true,
-        ]);
+        ] + ($kind === 'image' ? [
+            'alt' => method_exists($model, 'getAlt') ? (string) $model->getAlt() : '',
+            'decorative' => method_exists($model, 'getDecorative') && (bool) $model->getDecorative(),
+        ] : []));
 
         $template = $kind === 'image'
             ? '@BackOfficeDefaultTwig/file/image-edit.html.twig'
@@ -283,23 +325,44 @@ final class FileController
         }
 
         $oldModel = clone $model;
-        $model->setLocale($locale);
-        $model->setTitle((string) ($data['title'] ?? ''));
-        $model->setChapo((string) ($data['chapo'] ?? ''));
-        $model->setDescription((string) ($data['description'] ?? ''));
-        $model->setPostscriptum((string) ($data['postscriptum'] ?? ''));
-        $model->setVisible(!empty($data['visible']) ? 1 : 0);
-
-        $event = new FileCreateOrUpdateEvent((int) $model->getParentId());
-        $event->setModel($model);
-        $event->setOldModel($oldModel);
-
         $uploaded = $data['file'] ?? null;
-        if ($uploaded instanceof UploadedFile) {
-            $event->setUploadedFile($uploaded);
+
+        if ($kind === 'image') {
+            // Wording, visibility, alternative text and decorative flag all travel
+            // through the media facade, so this screen writes them exactly the way
+            // the API and the inline grid do.
+            $this->media->updateImage($model, new ImageUpdateDTO(
+                locale: $locale,
+                title: (string) ($data['title'] ?? ''),
+                chapo: (string) ($data['chapo'] ?? ''),
+                description: (string) ($data['description'] ?? ''),
+                postscriptum: (string) ($data['postscriptum'] ?? ''),
+                visible: !empty($data['visible']),
+                alt: (string) ($data['alt'] ?? ''),
+                decorative: !empty($data['decorative']),
+            ));
+        } else {
+            $model->setLocale($locale);
+            $model->setTitle((string) ($data['title'] ?? ''));
+            $model->setChapo((string) ($data['chapo'] ?? ''));
+            $model->setDescription((string) ($data['description'] ?? ''));
+            $model->setPostscriptum((string) ($data['postscriptum'] ?? ''));
+            $model->setVisible(!empty($data['visible']) ? 1 : 0);
         }
 
-        $this->events->dispatch($event, $eventName);
+        // Replacing the stored file is the one thing the facade does not carry: it
+        // stays on the file event, which is what moves the upload into the library.
+        if ($kind !== 'image' || $uploaded instanceof UploadedFile) {
+            $event = new FileCreateOrUpdateEvent((int) $model->getParentId());
+            $event->setModel($model);
+            $event->setOldModel($oldModel);
+
+            if ($uploaded instanceof UploadedFile) {
+                $event->setUploadedFile($uploaded);
+            }
+
+            $this->events->dispatch($event, $eventName);
+        }
 
         $saveMode = (string) $request->request->get('save_mode', 'stay');
         if ($saveMode === 'close') {
@@ -387,6 +450,11 @@ final class FileController
             'file_id' => $fileId,
             'file_name' => $fileName,
             'file_title' => (string) $model->getTitle(),
+            'file_alt' => $this->altText->resolve(
+                method_exists($model, 'getAlt') ? (string) $model->getAlt() : null,
+                method_exists($model, 'getDecorative') && (bool) $model->getDecorative(),
+                (string) $model->getTitle(),
+            ),
             'file_url' => $this->fileUrl($kind, $parentType, $model),
             'form' => $formView,
             'edit_language_id' => $editLanguageId,
@@ -578,12 +646,14 @@ final class FileController
     }
 
     /**
-     * @return list<array{id: int, title: string, file: string, visible: bool, position: int, url: string}>
+     * @return list<array{id: int, title: string, alt: string, decorative: bool, resolved_alt: string, file: string, visible: bool, position: int, url: string}>
      */
     private function fetchItems(string $kind, string $parentType, int $parentId): array
     {
         $model = $this->fileManager->getModelInstance($kind, $parentType);
-        $locale = $this->defaultLocale();
+        // The grid is edited in the language the admin is translating in, so what it
+        // shows and what the inline form writes are always the same wording.
+        $locale = $this->currentEditLocale();
 
         $query = $model->getQueryInstance();
         $filterMethod = 'filterBy'.ucfirst($parentType).'Id';
@@ -602,9 +672,15 @@ final class FileController
             }
             $record->setLocale($locale);
             $file = (string) $record->getFile();
+            $title = (string) $record->getTitle();
+            $alt = method_exists($record, 'getAlt') ? (string) $record->getAlt() : '';
+            $decorative = method_exists($record, 'getDecorative') && (bool) $record->getDecorative();
             $items[] = [
                 'id' => (int) $record->getId(),
-                'title' => (string) $record->getTitle(),
+                'title' => $title,
+                'alt' => $alt,
+                'decorative' => $decorative,
+                'resolved_alt' => $this->altText->resolve($alt, $decorative, $title),
                 'file' => $file,
                 'visible' => (bool) (method_exists($record, 'getVisible') ? $record->getVisible() : true),
                 'position' => (int) (method_exists($record, 'getPosition') ? $record->getPosition() : 0),
@@ -627,7 +703,7 @@ final class FileController
                 'toggle' => 'admin.image.toggle.process',
                 'delete' => 'admin.image.delete',
                 'update' => 'admin.image.update.view',
-                'update_title' => 'admin.image.update-title',
+                'update_title' => 'admin.image.update-inline',
                 'list' => 'admin.image.list-ajax',
             ]
             : [
@@ -683,5 +759,19 @@ final class FileController
         $defaultLang = LangQuery::create()->findOneByByDefault(1);
 
         return $defaultLang?->getLocale() ?? 'en_US';
+    }
+
+    /**
+     * The edition language of the admin, for fragments rendered without a request
+     * of their own (the grid is loaded by XHR, the switcher lives on the host page).
+     */
+    private function currentEditLocale(): string
+    {
+        $request = $this->requestStack->getCurrentRequest();
+        if ($request === null) {
+            return $this->defaultLocale();
+        }
+
+        return $this->editLocale->resolveFromRequest($request)->getLocale() ?? $this->defaultLocale();
     }
 }

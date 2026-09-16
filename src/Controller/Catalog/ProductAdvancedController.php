@@ -16,6 +16,7 @@ namespace BackOfficeDefaultTwigBundle\Controller\Catalog;
 
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormAction;
+use BackOfficeDefaultTwigBundle\Service\File\ProductVideoPresenter;
 use BackOfficeDefaultTwigBundle\Service\Product\CombinationsTabContextBuilder;
 use Propel\Runtime\ActiveQuery\Criteria;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -67,7 +68,10 @@ use Thelia\Model\ProductSaleElementsProductDocument;
 use Thelia\Model\ProductSaleElementsProductDocumentQuery;
 use Thelia\Model\ProductSaleElementsProductImage;
 use Thelia\Model\ProductSaleElementsProductImageQuery;
+use Thelia\Model\ProductSaleElementsProductVideo;
+use Thelia\Model\ProductSaleElementsProductVideoQuery;
 use Thelia\Model\ProductSaleElementsQuery;
+use Thelia\Model\ProductVideoQuery;
 use Thelia\Model\Template;
 use Thelia\Model\TemplateQuery;
 use Thelia\Tools\TokenProvider;
@@ -88,6 +92,7 @@ final class ProductAdvancedController
         private readonly CombinationsTabContextBuilder $combinationsTabContextBuilder,
         private readonly EventDispatcherInterface $imageEvents,
         private readonly TokenProvider $tokens,
+        private readonly ProductVideoPresenter $videoPresenter,
     ) {
     }
 
@@ -741,7 +746,7 @@ final class ProductAdvancedController
         return new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['product_id' => $productId, 'current_tab' => 'pse']));
     }
 
-    #[Route('/admin/product_sale_elements/{pseId}/{type}/{typeId}', name: 'admin.product_sale_elements.document_image_assoc', methods: ['POST'], requirements: ['pseId' => '\d+', 'typeId' => '\d+', 'type' => 'image|document|virtual'])]
+    #[Route('/admin/product_sale_elements/{pseId}/{type}/{typeId}', name: 'admin.product_sale_elements.document_image_assoc', methods: ['POST'], requirements: ['pseId' => '\d+', 'typeId' => '\d+', 'type' => 'image|document|virtual|video'])]
     public function pseDocumentImageAssoc(int $pseId, string $type, int $typeId, Request $request): JsonResponse
     {
         if ($this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
@@ -797,6 +802,24 @@ final class ProductAdvancedController
                 $response['is_associated'] = 0;
             }
             $response['product_document_id'] = $typeId;
+        } elseif ($type === 'video') {
+            if (ProductVideoQuery::create()->findPk($typeId) === null) {
+                return new JsonResponse(['error' => 'video not found'], Response::HTTP_NOT_FOUND);
+            }
+
+            $assoc = ProductSaleElementsProductVideoQuery::create()
+                ->filterByProductSaleElementsId($pseId)
+                ->findOneByProductVideoId($typeId);
+
+            if ($assoc === null) {
+                $assoc = new ProductSaleElementsProductVideo();
+                $assoc->setProductSaleElementsId($pseId)->setProductVideoId($typeId)->save();
+                $response['is_associated'] = 1;
+            } else {
+                $assoc->delete();
+                $response['is_associated'] = 0;
+            }
+            $response['product_video_id'] = $typeId;
         } elseif ($type === 'virtual') {
             if (ProductDocumentQuery::create()->findPk($typeId) === null) {
                 return new JsonResponse(['error' => 'document not found'], Response::HTTP_NOT_FOUND);
@@ -817,7 +840,7 @@ final class ProductAdvancedController
         return new JsonResponse($response);
     }
 
-    #[Route('/admin/product_sale_elements/ajax/{type}/{id}', name: 'admin.product_sale_elements.document_image_assoc.get_assoc', methods: ['GET'], requirements: ['id' => '\d+', 'type' => 'image|document|virtual'])]
+    #[Route('/admin/product_sale_elements/ajax/{type}/{id}', name: 'admin.product_sale_elements.document_image_assoc.get_assoc', methods: ['GET'], requirements: ['id' => '\d+', 'type' => 'image|document|virtual|video'])]
     public function pseDocumentImageAssocGet(string $type, int $id): JsonResponse
     {
         if ($this->access->check(self::RESOURCE, [], AccessManager::VIEW)) {
@@ -836,6 +859,7 @@ final class ProductAdvancedController
                 'image' => $this->pseImageItems($pse),
                 'document' => $this->pseDocumentItems($pse),
                 'virtual' => $this->pseVirtualDocumentItems($pse),
+                'video' => $this->pseVideoItems($pse),
                 default => [],
             },
         ]);
@@ -869,6 +893,40 @@ final class ProductAdvancedController
                 'url' => $this->processedImageUrl($image),
                 'filename' => (string) $image->getFile(),
                 'is_associated' => isset($assocIds[(int) $image->getId()]),
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<array{id: int, title: string, url: string, filename: string, is_associated: bool}>
+     */
+    private function pseVideoItems(ProductSaleElements $pse): array
+    {
+        $videos = ProductVideoQuery::create()
+            ->filterByProductId((int) $pse->getProductId())
+            ->orderByPosition()
+            ->find();
+
+        $assocIds = [];
+        foreach (ProductSaleElementsProductVideoQuery::create()->filterByProductSaleElementsId((int) $pse->getId())->find() as $assoc) {
+            $assocIds[(int) $assoc->getProductVideoId()] = true;
+        }
+
+        $locale = $this->defaultLocale();
+
+        $items = [];
+        foreach ($videos as $video) {
+            $video->setLocale($locale);
+            $items[] = [
+                'id' => (int) $video->getId(),
+                'title' => (string) $video->getTitle(),
+                // The thumbnail is what a video shows: the address it plays from never
+                // reaches this payload, and never reaches the picker.
+                'url' => $this->videoPresenter->thumbnailUrl($video),
+                'filename' => (string) $video->getProvider(),
+                'is_associated' => isset($assocIds[(int) $video->getId()]),
             ];
         }
 

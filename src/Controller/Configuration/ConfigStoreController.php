@@ -34,6 +34,7 @@ use Thelia\Core\File\Service\FileProcessorService;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Domain\Checkout\Enum\GuestCheckoutMode;
+use Thelia\Domain\Media\Video\VideoProviderResolver;
 use Thelia\Model\ConfigQuery;
 use Twig\Environment;
 
@@ -157,6 +158,7 @@ final class ConfigStoreController
             'store_country' => ConfigQuery::read('store_country'),
             'guest_checkout_mode' => ConfigQuery::read('guest_checkout_mode', GuestCheckoutMode::Disabled->value),
             'admin_two_factor_required' => (string) ConfigQuery::read('admin_two_factor_required', '0'),
+            'video_providers' => (string) ConfigQuery::read(VideoProviderResolver::PROVIDERS_VARIABLE, VideoProviderResolver::DEFAULT_PROVIDERS),
         ];
     }
 

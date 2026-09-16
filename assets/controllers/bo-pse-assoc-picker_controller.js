@@ -97,7 +97,9 @@ export default class extends Controller {
         const inner = document.createElement('div');
         inner.className = 'card-body small';
 
-        if (this.type === 'image' && item.url) {
+        // A video is shown by its thumbnail, like an image: the address it plays
+        // from is never part of this payload.
+        if ((this.type === 'image' || this.type === 'video') && item.url) {
             const img = document.createElement('img');
             img.src = item.url;
             img.alt = item.title || '';
@@ -105,7 +107,7 @@ export default class extends Controller {
             inner.appendChild(img);
         } else {
             const icon = document.createElement('i');
-            icon.className = 'bi bi-file-earmark fs-1 d-block mb-2';
+            icon.className = `bi ${this.type === 'video' ? 'bi-film' : 'bi-file-earmark'} fs-1 d-block mb-2`;
             inner.appendChild(icon);
         }
 

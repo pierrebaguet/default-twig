@@ -65,6 +65,7 @@ import BoTaxRuleMatrixController from './controllers/bo-tax-rule-matrix_controll
 import BoTemplateNoticeController from './controllers/bo-template-notice_controller.js';
 import BoTranslationsController from './controllers/bo-translations_controller.js';
 import BoUnsavedChangesController from './controllers/bo-unsaved-changes_controller.js';
+import BoVideoFormController from './controllers/bo-video-form_controller.js';
 import BoVirtualToggleController from './controllers/bo-virtual-toggle_controller.js';
 import BootstrapBridgeController from './controllers/bootstrap-bridge_controller.js';
 import BoPostLinkController from './controllers/bo-post-link_controller.js';
@@ -134,6 +135,7 @@ app.register('bo-tax-rule-matrix', BoTaxRuleMatrixController);
 app.register('bo-template-notice', BoTemplateNoticeController);
 app.register('bo-translations', BoTranslationsController);
 app.register('bo-unsaved-changes', BoUnsavedChangesController);
+app.register('bo-video-form', BoVideoFormController);
 app.register('bo-virtual-toggle', BoVirtualToggleController);
 app.register('bootstrap-bridge', BootstrapBridgeController);
 app.register('bo-post-link', BoPostLinkController);

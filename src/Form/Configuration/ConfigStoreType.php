@@ -33,6 +33,7 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Domain\Checkout\Enum\GuestCheckoutMode;
 use Thelia\Domain\Legal\CompanyIdentifier;
+use Thelia\Domain\Media\Video\VideoProvider;
 
 final class ConfigStoreType extends AbstractType
 {
@@ -193,6 +194,14 @@ final class ConfigStoreType extends AbstractType
                 ],
                 'placeholder' => false,
             ])
+            ->add('video_providers', ChoiceType::class, [
+                'required' => false,
+                'multiple' => true,
+                'expanded' => true,
+                'label' => $this->translator->trans('Video platforms'),
+                'help' => $this->translator->trans('The platforms a product video address may come from. An address from a platform left unticked is refused.'),
+                'choices' => self::videoProviderChoices(),
+            ])
             ->add('favicon_file', FileType::class, [
                 'required' => false,
                 'constraints' => [new Image(mimeTypes: ['image/png', 'image/x-icon'])],
@@ -222,6 +231,13 @@ final class ConfigStoreType extends AbstractType
                 static fn (mixed $value): string => self::normalizeIdentifier($value, $separators, $uppercase),
             ));
         }
+
+        // The platform list is stored as the CSV the resolver reads; the transformer
+        // keeps the form working on the list of codes the checkboxes produce.
+        $builder->get('video_providers')->addModelTransformer(new CallbackTransformer(
+            static fn (mixed $value): array => self::splitProviders($value),
+            static fn (mixed $value): string => \is_array($value) ? implode(',', $value) : '',
+        ));
 
         // Without this, an unchecked box would reach ConfigQuery::write() as an empty string.
         foreach (self::BOOLEAN_FIELDS as $field) {
@@ -280,6 +296,37 @@ final class ConfigStoreType extends AbstractType
             ->buildViolation($this->translator->trans('A store under VAT exemption cannot declare an intra-community VAT number.'))
             ->atPath('children[store_vat_intracom]')
             ->addViolation();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function videoProviderChoices(): array
+    {
+        $choices = [];
+
+        foreach (VideoProvider::cases() as $provider) {
+            // `file` is not a platform: a hosted video is uploaded, never pasted.
+            if (VideoProvider::File === $provider) {
+                continue;
+            }
+
+            $choices[$provider->label()] = $provider->value;
+        }
+
+        return $choices;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function splitProviders(mixed $value): array
+    {
+        if (!\is_string($value) || '' === trim($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(trim(...), explode(',', $value))));
     }
 
     private static function normalizeIdentifier(mixed $value, string $separators, bool $uppercase): string

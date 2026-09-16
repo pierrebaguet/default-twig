@@ -150,6 +150,36 @@ export default class extends Controller {
         return body;
     }
 
+    // A decorative image is published with an empty alt attribute, so its alt field
+    // has nothing left to say: it is disabled, and the missing-text warning goes away.
+    toggleDecorative(event) {
+        const form = event.currentTarget.closest('form');
+        const alt = form?.querySelector('input[name="alt"]');
+        if (alt) {
+            alt.disabled = event.currentTarget.checked;
+        }
+        this.updateAltWarning(form);
+    }
+
+    refreshAltWarning(event) {
+        this.updateAltWarning(event.currentTarget.closest('form'));
+    }
+
+    updateAltWarning(form) {
+        const warning = form?.querySelector('[data-alt-warning]');
+        if (!warning) {
+            return;
+        }
+        const alt = form.querySelector('input[name="alt"]');
+        const decorative = form.querySelector('input[name="decorative"]');
+        const described = Boolean(alt && alt.value.trim() !== '');
+        warning.classList.toggle('d-none', described || Boolean(decorative && decorative.checked));
+    }
+
+    withToken(url) {
+        return `${url}${url.includes('?') ? '&' : '?'}_token=${encodeURIComponent(this.tokenValue)}`;
+    }
+
     async toggle(event) {
         const button = event.currentTarget;
         const icon = button.querySelector('i');

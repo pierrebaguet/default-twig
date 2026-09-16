@@ -1,0 +1,20 @@
+{{ safe_hook('tab-video.top', { id: product_id, type: 'product' }) }}
+
+<div class="bo-video-panel card mb-3" data-controller="bo-video-form"
+     data-bo-video-form-list-url-value="{{ path('admin.video.list-ajax', { productId: product_id }) }}"
+     data-testid="bo-video-panel">
+    <div class="card-body" data-bo-video-form-target="form">
+        {% include '@BackOfficeDefaultTwig/file/_video_add_fields.html.twig' with { product_id: product_id, form: form } only %}
+    </div>
+
+    <div class="card-body pt-0" data-bo-video-form-target="list">
+        {% include '@BackOfficeDefaultTwig/file/_video_list.html.twig' with {
+            product_id: product_id,
+            items: items,
+            can_update: can_update,
+            can_delete: can_delete,
+        } only %}
+    </div>
+</div>
+
+{{ safe_hook('tab-video.bottom', { id: product_id, type: 'product' }) }}

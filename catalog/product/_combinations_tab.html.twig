@@ -118,6 +118,13 @@
                                                 </button>
                                                 <button type="button" class="btn btn-outline-secondary"
                                                         data-bs-toggle="modal" data-bs-target="#pse-assoc-modal"
+                                                        data-pse-id="{{ row.id }}" data-assoc-type="video"
+                                                        title="{{ 'Associate videos'|trans }}"
+                                                        data-testid="combinations-assoc-video-{{ row.id }}">
+                                                    <i class="bi bi-film" aria-hidden="true"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        data-bs-toggle="modal" data-bs-target="#pse-assoc-modal"
                                                         data-pse-id="{{ row.id }}" data-assoc-type="virtual"
                                                         title="{{ 'Associate virtual document'|trans }}"
                                                         data-testid="combinations-assoc-virtual-{{ row.id }}">
