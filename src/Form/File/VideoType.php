@@ -22,6 +22,7 @@ use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\Validator\Constraints\Callback;
+use Symfony\Component\Validator\Constraints\Length;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Domain\Media\Video\UnsupportedVideoUrlException;
@@ -55,6 +56,15 @@ final class VideoType extends AbstractType
             ->add('title', TextType::class, [
                 'required' => false,
                 'label' => $this->translator->trans('Title'),
+            ])
+            // The accessible name belongs to the moment a video is added: asking a
+            // merchant to reopen an edition screen for it is how a video ends up
+            // published without one.
+            ->add('alt', TextType::class, [
+                'required' => false,
+                'constraints' => [new Length(max: 255)],
+                'label' => $this->translator->trans('Alternative text'),
+                'help' => $this->translator->trans('What a screen reader says in place of the video. Left empty, the title is used.'),
             ])
             ->add('visible', CheckboxType::class, [
                 'required' => false,
@@ -106,8 +116,8 @@ final class VideoType extends AbstractType
         } catch (UnsupportedVideoUrlException $exception) {
             $context
                 ->buildViolation($this->translator->trans(
-                    'This address is not recognised. Accepted platforms: %platforms.',
-                    ['%platforms' => $exception->getEnabledProviderLabels()],
+                    'This address is not recognised. Accepted platforms: %platforms%.',
+                    ['%platforms%' => $exception->getEnabledProviderLabels()],
                 ))
                 ->atPath('children[url]')
                 ->addViolation();

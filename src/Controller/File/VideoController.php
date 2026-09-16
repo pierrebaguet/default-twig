@@ -19,6 +19,7 @@ use BackOfficeDefaultTwigBundle\Form\File\VideoType;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\File\ProductVideoPresenter;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormError;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
@@ -70,6 +71,7 @@ final class VideoController
         private readonly TranslatorInterface $translator,
         private readonly TokenProvider $tokens,
         private readonly RequestStack $requestStack,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -126,15 +128,20 @@ final class VideoController
                 uploadedFile: $uploaded instanceof UploadedFile ? $uploaded : null,
                 locale: $this->currentEditLocale($request),
                 title: (string) ($data['title'] ?? ''),
+                alt: (string) ($data['alt'] ?? ''),
                 visible: (bool) ($data['visible'] ?? false),
             ));
         } catch (UnsupportedVideoUrlException $exception) {
+            // The only message a merchant can act on: it names the platforms his own
+            // shop accepts. Everything else below is for the log, not for the screen.
             return $this->addFormError($productId, $form, 'url', $this->translator->trans(
-                'This address is not recognised. Accepted platforms: %platforms.',
-                ['%platforms' => $exception->getEnabledProviderLabels()],
+                'This address is not recognised. Accepted platforms: %platforms%.',
+                ['%platforms%' => $exception->getEnabledProviderLabels()],
             ));
         } catch (\Throwable $exception) {
-            return $this->addFormError($productId, $form, 'file', $exception->getMessage());
+            $this->logger->error('Product video creation failed.', ['exception' => $exception, 'product_id' => $productId]);
+
+            return $this->addFormError($productId, $form, 'file', $this->translator->trans('This video could not be added.'));
         }
 
         return new JsonResponse(['status' => 'ok']);
@@ -157,7 +164,9 @@ final class VideoController
         try {
             $this->media->deleteVideo($video);
         } catch (\Throwable $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+            $this->logger->error('Product video deletion failed.', ['exception' => $exception, 'video_id' => $videoId]);
+
+            return new JsonResponse(['error' => $this->translator->trans('This video could not be deleted.')], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return new JsonResponse(['status' => 'ok']);
@@ -180,7 +189,9 @@ final class VideoController
         try {
             $this->media->toggleVideoVisibility($video);
         } catch (\Throwable $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+            $this->logger->error('Product video visibility change failed.', ['exception' => $exception, 'video_id' => $videoId]);
+
+            return new JsonResponse(['error' => $this->translator->trans('This video could not be saved.')], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return new JsonResponse(['status' => 'ok']);
@@ -209,7 +220,9 @@ final class VideoController
         try {
             $this->media->updateVideoPosition($video, $position);
         } catch (\Throwable $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+            $this->logger->error('Product video reordering failed.', ['exception' => $exception, 'video_id' => $videoId]);
+
+            return new JsonResponse(['error' => $this->translator->trans('This video could not be saved.')], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return new JsonResponse(['status' => 'ok']);
@@ -332,9 +345,12 @@ final class VideoController
      */
     private function createEditForm(int $productId, string $locale, ?array $data = null): FormInterface
     {
+        // Two images of a product may share a title, or have none: the id is what
+        // keeps every entry of the list distinct, and selectable.
         $choices = [];
         foreach ($this->presenter->thumbnailChoices($productId, $locale) as $image) {
-            $choices[$image['title']] = $image['id'];
+            $label = $image['title'] !== '' ? $image['title'] : $image['filename'];
+            $choices[\sprintf('%s #%d', $label, $image['id'])] = $image['id'];
         }
 
         return $this->formFactory->createNamed(self::EDIT_FORM_NAME, VideoMetadataType::class, $data, [

@@ -746,6 +746,14 @@ final class ProductAdvancedController
         return new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['product_id' => $productId, 'current_tab' => 'pse']));
     }
 
+    /**
+     * Attaches a medium of the product to one of its combinations, or detaches it.
+     *
+     * Every medium is looked up inside the product of the combination: an id that
+     * belongs to another product is not found here, so a crafted call cannot hang
+     * the images, documents or videos of one product onto the combination of
+     * another.
+     */
     #[Route('/admin/product_sale_elements/{pseId}/{type}/{typeId}', name: 'admin.product_sale_elements.document_image_assoc', methods: ['POST'], requirements: ['pseId' => '\d+', 'typeId' => '\d+', 'type' => 'image|document|virtual|video'])]
     public function pseDocumentImageAssoc(int $pseId, string $type, int $typeId, Request $request): JsonResponse
     {
@@ -760,6 +768,8 @@ final class ProductAdvancedController
             return new JsonResponse(['error' => 'pse not found'], Response::HTTP_NOT_FOUND);
         }
 
+        $productId = (int) $pse->getProductId();
+
         $response = [
             'product_sale_elements_id' => $pseId,
             'type' => $type,
@@ -767,7 +777,7 @@ final class ProductAdvancedController
         ];
 
         if ($type === 'image') {
-            if (ProductImageQuery::create()->findPk($typeId) === null) {
+            if (ProductImageQuery::create()->filterByProductId($productId)->filterById($typeId)->findOne() === null) {
                 return new JsonResponse(['error' => 'image not found'], Response::HTTP_NOT_FOUND);
             }
 
@@ -785,7 +795,7 @@ final class ProductAdvancedController
             }
             $response['product_image_id'] = $typeId;
         } elseif ($type === 'document') {
-            if (ProductDocumentQuery::create()->findPk($typeId) === null) {
+            if (ProductDocumentQuery::create()->filterByProductId($productId)->filterById($typeId)->findOne() === null) {
                 return new JsonResponse(['error' => 'document not found'], Response::HTTP_NOT_FOUND);
             }
 
@@ -803,7 +813,7 @@ final class ProductAdvancedController
             }
             $response['product_document_id'] = $typeId;
         } elseif ($type === 'video') {
-            if (ProductVideoQuery::create()->findPk($typeId) === null) {
+            if (ProductVideoQuery::create()->filterByProductId($productId)->filterById($typeId)->findOne() === null) {
                 return new JsonResponse(['error' => 'video not found'], Response::HTTP_NOT_FOUND);
             }
 

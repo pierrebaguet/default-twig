@@ -6,13 +6,25 @@
 }) }}
     <input type="hidden" name="_token" value="{{ assignToken() }}">
 
-    {{ form_errors(form) }}
+    <div data-video-form-errors role="alert" aria-live="assertive" id="bo-video-add-errors">
+        {{ form_errors(form) }}
+        {{ form_errors(form.url) }}
+    </div>
 
     <div class="row g-3 align-items-start">
-        <div class="col-md-5">
+        <div class="col-md-4">
             {{ form_label(form.url) }}
-            {{ form_widget(form.url, { attr: { class: 'form-control', placeholder: 'https://', 'data-testid': 'bo-video-url' } }) }}
-            {{ form_errors(form.url) }}
+            {# Every refusal this form can raise is about the address — an unknown
+               platform, both sources given, neither given — so the field the merchant
+               has to fix is named invalid whether the violation landed on it or on the
+               form as a whole. #}
+            {% set url_invalid = form.vars.errors|length or form.url.vars.errors|length %}
+            {{ form_widget(form.url, { attr: {
+                class: 'form-control',
+                placeholder: 'https://',
+                'data-testid': 'bo-video-url',
+                'aria-describedby': 'bo-video-add-errors',
+            }|merge(url_invalid ? { 'aria-invalid': 'true' } : {}) }) }}
             {{ form_help(form.url) }}
         </div>
         <div class="col-md-3">
@@ -20,14 +32,20 @@
             {{ form_widget(form.file, { attr: { class: 'form-control', 'data-testid': 'bo-video-file' } }) }}
             {{ form_errors(form.file) }}
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             {{ form_label(form.title) }}
             {{ form_widget(form.title, { attr: { class: 'form-control', 'data-testid': 'bo-video-title' } }) }}
         </div>
+        <div class="col-md-2">
+            {{ form_label(form.alt) }}
+            {{ form_widget(form.alt, { attr: { class: 'form-control', maxlength: 255, 'data-testid': 'bo-video-alt' } }) }}
+            {{ form_errors(form.alt) }}
+        </div>
         <div class="col-md-1">
             <span class="form-label d-block" aria-hidden="true">&nbsp;</span>
-            <button type="submit" class="btn btn-primary w-100" data-testid="bo-video-add-submit">
+            <button type="submit" class="btn btn-primary w-100" title="{{ 'Add a video'|trans }}" data-testid="bo-video-add-submit">
                 <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                <span class="visually-hidden">{{ 'Add a video'|trans }}</span>
             </button>
         </div>
     </div>

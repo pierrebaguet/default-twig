@@ -18,6 +18,7 @@ use BackOfficeDefaultTwigBundle\Form\File\DocumentMetadataType;
 use BackOfficeDefaultTwigBundle\Form\File\ImageMetadataType;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormError;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -55,6 +56,9 @@ final class FileController
 {
     private const LIST_THUMBNAIL_SIZE = 300;
 
+    /** The alt column of every image table. */
+    public const ALT_MAX_LENGTH = 255;
+
     public function __construct(
         private readonly AdminAccessChecker $access,
         private readonly Environment $twig,
@@ -73,6 +77,7 @@ final class FileController
         private readonly RequestStack $requestStack,
         private readonly MediaFacade $media,
         private readonly AltTextResolver $altText,
+        private readonly LoggerInterface $logger,
     ) {
     }
 
@@ -138,18 +143,33 @@ final class FileController
             return new JsonResponse(['error' => $this->translator->trans('File not found.')], Response::HTTP_NOT_FOUND);
         }
 
+        // A decorative image disables its alt field, which then posts nothing: null
+        // keeps the text the merchant had written, for the day the box is unticked
+        // again. The flag itself follows the same rule, so a caller that only sends
+        // a title — an old link, a module — does not silently undecorate the image.
+        $alt = $request->request->has('alt') ? trim((string) $request->request->get('alt', '')) : null;
+        $decorative = $request->request->has('decorative') ? $request->request->getBoolean('decorative') : null;
+
+        if ($alt !== null && mb_strlen($alt) > self::ALT_MAX_LENGTH) {
+            return new JsonResponse(
+                ['error' => $this->translator->trans('The alternative text cannot be longer than %count characters.', ['%count' => self::ALT_MAX_LENGTH])],
+                Response::HTTP_UNPROCESSABLE_ENTITY,
+            );
+        }
+
         try {
             $this->media->updateImage($model, new ImageUpdateDTO(
                 locale: $this->editLocale->resolveFromRequest($request)->getLocale() ?? 'en_US',
                 title: trim((string) $request->request->get('title', '')),
-                // A decorative image disables its alt field, which then posts nothing:
-                // null keeps the text the merchant had written, for the day the box
-                // is unticked again.
-                alt: $request->request->has('alt') ? trim((string) $request->request->get('alt', '')) : null,
-                decorative: $request->request->getBoolean('decorative'),
+                alt: $alt,
+                decorative: $decorative,
             ));
         } catch (\Throwable $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
+            // The reason belongs in the log, not on the screen: a driver or a
+            // filesystem message would hand a merchant paths and queries.
+            $this->logger->error('Inline image update failed.', ['exception' => $exception, 'image_id' => $imageId]);
+
+            return new JsonResponse(['error' => $this->translator->trans('This image could not be saved.')], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         if ($request->isXmlHttpRequest()) {

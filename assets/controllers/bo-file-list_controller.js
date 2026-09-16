@@ -150,14 +150,26 @@ export default class extends Controller {
         return body;
     }
 
+    // The image grid names its field `alt`, the video grid names it
+    // `thelia_product_video_modification[alt]`: the marker attribute is what both
+    // have in common, so the warning follows either one.
+    altFieldOf(form) {
+        return form?.querySelector('[data-alt-field]') ?? null;
+    }
+
     // A decorative image is published with an empty alt attribute, so its alt field
     // has nothing left to say: it is disabled, and the missing-text warning goes away.
     toggleDecorative(event) {
         const form = event.currentTarget.closest('form');
-        const alt = form?.querySelector('input[name="alt"]');
+        const checked = event.currentTarget.checked;
+        const alt = this.altFieldOf(form);
         if (alt) {
-            alt.disabled = event.currentTarget.checked;
+            // Read-only, not disabled: the field stays reachable by keyboard, keeps
+            // being read out, and still posts the text it holds — so ticking then
+            // unticking the box gives the merchant his wording back.
+            alt.readOnly = checked;
         }
+        form?.querySelector('[data-decorative-hint]')?.classList.toggle('d-none', !checked);
         this.updateAltWarning(form);
     }
 
@@ -170,8 +182,8 @@ export default class extends Controller {
         if (!warning) {
             return;
         }
-        const alt = form.querySelector('input[name="alt"]');
-        const decorative = form.querySelector('input[name="decorative"]');
+        const alt = this.altFieldOf(form);
+        const decorative = form.querySelector('input[type="checkbox"][name$="decorative"]');
         const described = Boolean(alt && alt.value.trim() !== '');
         warning.classList.toggle('d-none', described || Boolean(decorative && decorative.checked));
     }

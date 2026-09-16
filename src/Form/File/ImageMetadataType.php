@@ -23,6 +23,7 @@ use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\Validator\Constraints\Image;
+use Symfony\Component\Validator\Constraints\Length;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
@@ -52,6 +53,9 @@ final class ImageMetadataType extends AbstractType
             ])
             ->add('alt', TextType::class, [
                 'required' => false,
+                // The alt column holds 255 characters: past that the write fails in
+                // the driver, so the form says it first.
+                'constraints' => [new Length(max: 255)],
                 'label' => $this->translator->trans('Alternative text'),
                 'help' => $this->translator->trans('What a screen reader says in place of the image. Left empty, the title is used.'),
             ])

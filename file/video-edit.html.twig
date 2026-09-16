@@ -52,7 +52,7 @@
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">{{ 'Thumbnail'|trans }}</label>
+                            <label class="form-label" for="{{ form.thumbnail_image_id.vars.id }}">{{ 'Thumbnail'|trans }}</label>
                             <div class="bg-light text-center p-3 rounded">
                                 {% if thumbnail_url %}
                                     <img src="{{ thumbnail_url }}" alt="" class="img-fluid" style="max-height: 320px;" data-testid="bo-video-edit-thumbnail">
@@ -69,7 +69,6 @@
                             </div>
 
                             <div class="mb-3 mt-3">
-                                {{ form_label(form.thumbnail_image_id) }}
                                 {{ form_widget(form.thumbnail_image_id, { attr: { class: 'form-select', 'data-testid': 'bo-video-edit-thumbnail-choice' } }) }}
                                 {{ form_help(form.thumbnail_image_id) }}
                             </div>

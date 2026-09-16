@@ -2,9 +2,15 @@
 
 <div class="bo-video-panel card mb-3" data-controller="bo-video-form"
      data-bo-video-form-list-url-value="{{ path('admin.video.list-ajax', { productId: product_id }) }}"
+     data-bo-video-form-added-message-value="{{ 'The video was added.'|trans }}"
+     data-bo-video-form-failed-message-value="{{ 'This video could not be added.'|trans }}"
      data-testid="bo-video-panel">
-    <div class="card-body" data-bo-video-form-target="form">
-        {% include '@BackOfficeDefaultTwig/file/_video_add_fields.html.twig' with { product_id: product_id, form: form } only %}
+    <div class="card-body">
+        <div data-bo-video-form-target="form">
+            {% include '@BackOfficeDefaultTwig/file/_video_add_fields.html.twig' with { product_id: product_id, form: form } only %}
+        </div>
+        {# Outside the swapped fragment, so what it says survives the answer it announces. #}
+        <div class="mt-2" role="status" aria-live="polite" data-bo-video-form-target="status" data-testid="bo-video-status"></div>
     </div>
 
     <div class="card-body pt-0" data-bo-video-form-target="list">

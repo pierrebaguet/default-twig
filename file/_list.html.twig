@@ -19,8 +19,11 @@
                 <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}">
                     <div class="card h-100">
                         {% if kind == 'image' %}
+                            {# The link is named on its own: the thumbnail alt is empty for a
+                               decorative image, and empty for one not described yet. #}
                             <a href="{{ path(urls.update, { parentType: parent_type, imageId: item.id }) }}"
-                               class="d-flex align-items-center justify-content-center bg-light p-2" style="height: 140px;" data-testid="bo-file-thumb">
+                               class="d-flex align-items-center justify-content-center bg-light p-2" style="height: 140px;"
+                               aria-label="{{ 'Edit image %id'|trans({ '%id': item.id }) }}" data-testid="bo-file-thumb">
                                 <img src="{{ item.url }}" alt="{{ item.resolved_alt|default('') }}" class="img-fluid" style="max-height: 100%;">
                             </a>
                         {% else %}
@@ -48,22 +51,33 @@
                                     {% if kind == 'image' %}
                                         <div class="input-group input-group-sm mb-1">
                                             <input type="text" name="alt" value="{{ item.alt|default('') }}" class="form-control"
-                                                   placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}"
-                                                   data-action="input->bo-file-list#refreshAltWarning"
+                                                   placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}" maxlength="255"
+                                                   data-alt-field data-action="input->bo-file-list#refreshAltWarning"
+                                                   aria-describedby="decorative-hint-{{ parent_type }}-{{ item.id }}"
                                                    data-testid="bo-file-alt-input-{{ item.id }}"
-                                                   {% if item.decorative|default(false) %}disabled{% endif %}>
+                                                   {% if item.decorative|default(false) %}readonly{% endif %}>
                                             <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}"
                                                     data-testid="bo-file-inline-save-{{ item.id }}">
                                                 <i class="bi bi-check2" aria-hidden="true"></i>
                                             </button>
                                         </div>
                                         <div class="form-check form-check-inline small">
+                                            {# The grid always states the flag, checked or not; a caller that sends
+                                               nothing leaves it alone, which is what an old title-only link does. #}
+                                            <input type="hidden" name="decorative" value="0">
                                             <input class="form-check-input" type="checkbox" name="decorative" value="1"
                                                    id="decorative-{{ parent_type }}-{{ item.id }}"
                                                    data-action="bo-file-list#toggleDecorative"
                                                    data-testid="bo-file-decorative-{{ item.id }}"
                                                    {% if item.decorative|default(false) %}checked{% endif %}>
                                             <label class="form-check-label" for="decorative-{{ parent_type }}-{{ item.id }}">{{ 'Decorative image'|trans }}</label>
+                                        </div>
+                                        {# Read-only rather than disabled: the field stays on the keyboard path,
+                                           and says why it cannot be typed in. #}
+                                        <div class="small text-muted{% if not item.decorative|default(false) %} d-none{% endif %}"
+                                             id="decorative-hint-{{ parent_type }}-{{ item.id }}"
+                                             data-decorative-hint data-testid="bo-file-decorative-hint-{{ item.id }}">
+                                            {{ 'Silenced for a decorative image'|trans }}
                                         </div>
                                         <div class="small text-warning-emphasis{% if item.decorative|default(false) or item.alt|default('') is not empty %} d-none{% endif %}"
                                              data-alt-warning data-testid="bo-file-alt-warning-{{ item.id }}">

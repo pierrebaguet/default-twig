@@ -88,7 +88,7 @@ final readonly class ProductVideoPresenter
     /**
      * The thumbnail choices of a video: every image of the product, by position.
      *
-     * @return list<array{id: int, title: string, url: string}>
+     * @return list<array{id: int, title: string, filename: string, url: string}>
      */
     public function thumbnailChoices(int $productId, string $locale): array
     {
@@ -98,7 +98,8 @@ final readonly class ProductVideoPresenter
             $image->setLocale($locale);
             $choices[] = [
                 'id' => (int) $image->getId(),
-                'title' => (string) $image->getTitle() ?: (string) $image->getFile(),
+                'title' => (string) $image->getTitle(),
+                'filename' => (string) $image->getFile(),
                 'url' => $this->imageUrl($image),
             ];
         }

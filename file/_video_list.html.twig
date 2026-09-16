@@ -14,8 +14,10 @@
             {% for item in items|sort((a, b) => a.position <=> b.position) %}
                 <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}" data-testid="bo-video-item-{{ item.id }}">
                     <div class="card h-100">
+                        {# Named on its own: the thumbnail alt may legitimately be empty. #}
                         <a href="{{ path('admin.video.update.view', { productId: product_id, videoId: item.id }) }}"
                            class="d-flex align-items-center justify-content-center bg-light p-2 position-relative" style="height: 140px;"
+                           aria-label="{{ 'Edit video %id'|trans({ '%id': item.id }) }}"
                            data-testid="bo-video-thumb-{{ item.id }}">
                             {% if item.thumbnail_url %}
                                 <img src="{{ item.thumbnail_url }}" alt="{{ item.resolved_alt }}" class="img-fluid" style="max-height: 100%;">
@@ -51,8 +53,8 @@
                                     </div>
                                     <div class="input-group input-group-sm mb-1">
                                         <input type="text" name="thelia_product_video_modification[alt]" value="{{ item.alt }}" class="form-control"
-                                               placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}"
-                                               data-action="input->bo-file-list#refreshAltWarning"
+                                               placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}" maxlength="255"
+                                               data-alt-field data-action="input->bo-file-list#refreshAltWarning"
                                                data-testid="bo-video-alt-input-{{ item.id }}">
                                         <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}"
                                                 data-testid="bo-video-inline-save-{{ item.id }}">

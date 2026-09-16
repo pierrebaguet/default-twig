@@ -1,6 +1,7 @@
 <div class="modal fade" id="pse-assoc-modal" tabindex="-1" aria-labelledby="pse-assoc-modal-label" aria-hidden="true"
      data-controller="bo-pse-assoc-picker"
      data-associated-label="{{ 'Associated'|trans }}"
+     data-bo-pse-assoc-picker-token-value="{{ assignToken() }}"
      data-bo-pse-assoc-picker-list-url-template-value="{{ path('admin.product_sale_elements.document_image_assoc.get_assoc', { type: 'image', id: 0 }) }}"
      data-bo-pse-assoc-picker-toggle-url-template-value="{{ path('admin.product_sale_elements.document_image_assoc', { pseId: 0, type: 'image', typeId: 0 }) }}">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">

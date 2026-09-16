@@ -7,6 +7,7 @@ export default class extends Controller {
     static values = {
         listUrlTemplate: String,
         toggleUrlTemplate: String,
+        token: String,
     };
 
     connect() {
