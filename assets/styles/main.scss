@@ -467,16 +467,25 @@ label.FieldInput-label.required::after {
     box-shadow: inset 0 1px 0 rgba(15, 23, 42, .02);
 }
 
-// File inputs - blend in with the rest of the form
+// File inputs - the same control height as every other input, and a browse
+// button that fills it.
+//
+// The button is a box of the browser's own shadow tree: it covers the control
+// only when its padding matches the control's, its negative margins eat that
+// padding back, and nothing stretches the control past the height its padding
+// gives it. Taking the padding from $input-padding-y rather than a value of its
+// own is what keeps a file field the same height as the text field beside it -
+// it used to be 9px shorter, and a grid row that stretched it left the browse
+// button floating with the background showing underneath.
 input[type="file"].form-control,
 input[type="file"] {
-    padding: .35rem .9rem;
+    padding: $input-padding-y $input-padding-x;
 
     &::file-selector-button {
         background-color: #f1f3f6;
         border: 0;
-        padding: .35rem .9rem;
-        margin: -.35rem .9rem -.35rem -.9rem;
+        padding: $input-padding-y $input-padding-x;
+        margin: (-$input-padding-y) $input-padding-x (-$input-padding-y) (-$input-padding-x);
         border-right: 1px solid #cbd0d6;
         font-weight: 500;
         color: #2c2c2c;
@@ -1192,6 +1201,13 @@ td.bo-datatable__details-col {
     > .bo-field {
         grid-column: span 12;
         min-width: 0;
+
+        // Every part keeps the height its own content gives it. A row is as tall
+        // as its tallest field, and a control stretched to that height would be
+        // deformed - a file input, whose browse button does not follow, most of all.
+        > * {
+            align-self: start;
+        }
 
         @supports (grid-template-rows: subgrid) {
             display: grid;
