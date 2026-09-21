@@ -38,6 +38,7 @@ use Thelia\Domain\Media\DTO\ProductVideoCreateDTO;
 use Thelia\Domain\Media\DTO\ProductVideoUpdateDTO;
 use Thelia\Domain\Media\MediaFacade;
 use Thelia\Domain\Media\Video\UnsupportedVideoUrlException;
+use Thelia\Domain\Media\Video\VideoProvider;
 use Thelia\Domain\Media\Video\VideoProviderResolver;
 use Thelia\Model\LangQuery;
 use Thelia\Model\ProductVideo;
@@ -303,18 +304,59 @@ final class VideoController
 
         $thumbnailId = $data['thumbnail_image_id'] ?? null;
 
-        $this->media->updateVideo($video, new ProductVideoUpdateDTO(
-            locale: $submittedLocale !== '' ? $submittedLocale : $locale,
-            // `false` is the only way to say "no thumbnail any more"; null would mean
-            // "the caller said nothing" and would keep the image that is set.
-            thumbnailImageId: $thumbnailId === null || $thumbnailId === '' ? false : (int) $thumbnailId,
-            title: (string) ($data['title'] ?? ''),
-            alt: (string) ($data['alt'] ?? ''),
-            description: (string) ($data['description'] ?? ''),
-            chapo: (string) ($data['chapo'] ?? ''),
-            postscriptum: (string) ($data['postscriptum'] ?? ''),
-            visible: !empty($data['visible']),
-        ));
+        // The source is replaced only when the merchant named one: an edition of the
+        // wording posts both fields empty, and the video keeps what it plays from.
+        $url = trim((string) ($data['url'] ?? ''));
+        $uploaded = $data['file'] ?? null;
+
+        try {
+            $resolved = $url !== '' ? $this->providers->resolve($url) : null;
+        } catch (UnsupportedVideoUrlException $exception) {
+            return $this->renderEditFormError(
+                $productId,
+                $video,
+                $form,
+                (int) $editLang->getId(),
+                $locale,
+                'url',
+                $this->translator->trans(
+                    'This address is not recognised. Accepted platforms: %platforms%.',
+                    ['%platforms%' => $exception->getEnabledProviderLabels()],
+                ),
+            );
+        }
+
+        try {
+            $this->media->updateVideo($video, new ProductVideoUpdateDTO(
+                provider: $resolved?->provider,
+                externalId: $resolved?->externalId,
+                uploadedFile: $uploaded instanceof UploadedFile ? $uploaded : null,
+                locale: $submittedLocale !== '' ? $submittedLocale : $locale,
+                // `false` is the only way to say "no thumbnail any more"; null would mean
+                // "the caller said nothing" and would keep the image that is set.
+                thumbnailImageId: $thumbnailId === null || $thumbnailId === '' ? false : (int) $thumbnailId,
+                title: (string) ($data['title'] ?? ''),
+                alt: (string) ($data['alt'] ?? ''),
+                description: (string) ($data['description'] ?? ''),
+                chapo: (string) ($data['chapo'] ?? ''),
+                postscriptum: (string) ($data['postscriptum'] ?? ''),
+                visible: !empty($data['visible']),
+            ));
+        } catch (\Throwable $exception) {
+            // A refused upload, a driver error: the reason belongs in the log, and the
+            // merchant gets the one sentence he can act on.
+            $this->logger->error('Product video update failed.', ['exception' => $exception, 'video_id' => $videoId]);
+
+            return $this->renderEditFormError(
+                $productId,
+                $video,
+                $form,
+                (int) $editLang->getId(),
+                $locale,
+                $uploaded instanceof UploadedFile ? 'file' : 'url',
+                $this->translator->trans('This video could not be saved.'),
+            );
+        }
 
         if ((string) $request->request->get('save_mode', 'stay') === 'close') {
             return new RedirectResponse($this->productUrl($productId));
@@ -364,6 +406,30 @@ final class VideoController
         ]);
     }
 
+    /**
+     * The edition screen again, with the message on the field the merchant has to fix.
+     */
+    private function renderEditFormError(
+        int $productId,
+        ProductVideo $video,
+        FormInterface $form,
+        int $editLanguageId,
+        string $locale,
+        string $field,
+        string $message,
+    ): Response {
+        $form->get($field)->addError(new FormError($message));
+        $video->setLocale($locale);
+
+        return new Response(
+            $this->twig->render(
+                '@BackOfficeDefaultTwig/file/video-edit.html.twig',
+                $this->editContext($productId, $video, $form, $editLanguageId, $locale),
+            ),
+            Response::HTTP_UNPROCESSABLE_ENTITY,
+        );
+    }
+
     private function renderAddForm(int $productId, FormInterface $form, int $status): Response
     {
         return new Response($this->twig->render('@BackOfficeDefaultTwig/file/_video_add_fields.html.twig', [
@@ -400,14 +466,20 @@ final class VideoController
      */
     private function editContext(int $productId, ProductVideo $video, FormInterface $form, int $editLanguageId, string $locale): array
     {
-        $provider = (string) $video->getProvider();
+        $provider = VideoProvider::tryFrom((string) $video->getProvider()) ?? VideoProvider::File;
 
         return [
             'product_id' => $productId,
             'video_id' => (int) $video->getId(),
             'video_title' => (string) $video->getTitle(),
-            'provider' => $provider,
+            // The platform as a shopper would name it, not the code the column holds.
+            'provider' => $provider->label(),
             'hosted' => $video->isHostedFile(),
+            // What the video plays from today, said plainly next to the fields that
+            // replace it. The address a merchant typed is never rebuilt here: a
+            // platform video states its identifier, a hosted one its file name.
+            'source_external_id' => (string) $video->getExternalId(),
+            'source_file' => (string) $video->getFile(),
             'thumbnail_url' => $this->presenter->thumbnailUrl($video),
             'thumbnail_choices' => $this->presenter->thumbnailChoices($productId, $locale),
             'form' => $form->createView(),

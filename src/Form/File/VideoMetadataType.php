@@ -17,19 +17,28 @@ namespace BackOfficeDefaultTwigBundle\Form\File;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\FileType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Validator\Constraints\Callback;
 use Symfony\Component\Validator\Constraints\Length;
 use Symfony\Component\Validator\Constraints\NotBlank;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * The full edition screen of a product video. The address is not editable here:
- * a merchant who wants another video adds one, so a stored identifier is never
- * silently swapped under an existing position and thumbnail.
+ * The full edition screen of a product video.
+ *
+ * The source can be replaced here, an address by another address or by a file
+ * and the other way round: a merchant who mistyped an address, or who re-encoded
+ * the film he hosts, fixes it without losing the position, the thumbnail, the
+ * wording and the combinations the video is bound to. Both fields left empty mean
+ * the video keeps the source it has - which is what an edition of the wording
+ * alone posts.
  */
 final class VideoMetadataType extends AbstractType
 {
@@ -46,6 +55,16 @@ final class VideoMetadataType extends AbstractType
             ])
             ->add('locale', HiddenType::class, [
                 'constraints' => [new NotBlank()],
+            ])
+            ->add('url', TextType::class, [
+                'required' => false,
+                'label' => $this->translator->trans('Replace with another address'),
+                'help' => $this->translator->trans('YouTube, Vimeo or Dailymotion. Only the identifier of the video is stored.'),
+            ])
+            ->add('file', FileType::class, [
+                'required' => false,
+                'label' => $this->translator->trans('Replace with a file'),
+                'help' => $this->translator->trans('Hosted by the shop. MP4, WebM or Ogg.'),
             ])
             ->add('title', TextType::class, [
                 'required' => false,
@@ -90,7 +109,29 @@ final class VideoMetadataType extends AbstractType
             ->setDefaults([
                 'csrf_token_id' => 'admin.video_metadata',
                 'thumbnail_choices' => [],
+                'constraints' => [new Callback($this->checkSource(...))],
             ])
             ->setAllowedTypes('thumbnail_choices', 'array');
+    }
+
+    /**
+     * A replacement names one source, never two: an address and a file together
+     * leave no way to say which one the merchant meant to keep.
+     */
+    public function checkSource(mixed $value, ExecutionContextInterface $context): void
+    {
+        if (!\is_array($value)) {
+            return;
+        }
+
+        $url = \is_string($value['url'] ?? null) ? trim($value['url']) : '';
+        $hasFile = ($value['file'] ?? null) instanceof UploadedFile;
+
+        if ($url !== '' && $hasFile) {
+            $context
+                ->buildViolation($this->translator->trans('Give an address or a file, not both.'))
+                ->atPath('children[url]')
+                ->addViolation();
+        }
     }
 }

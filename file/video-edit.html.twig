@@ -48,6 +48,46 @@
                         testid: 'bo-video-edit',
                     } only %}
 
+                    <h2 class="h5 mb-3">{{ 'Source'|trans }}</h2>
+
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <p class="d-flex align-items-center gap-2 mb-3" data-testid="bo-video-edit-source">
+                                {% if hosted %}
+                                    <i class="bi bi-film" aria-hidden="true"></i>
+                                    <span>{{ 'Hosted by the shop'|trans }}</span>
+                                    <code>{{ source_file }}</code>
+                                {% else %}
+                                    <i class="bi bi-play-btn" aria-hidden="true"></i>
+                                    <span>{{ 'Played from %platform'|trans({ '%platform': provider }) }}</span>
+                                    <code>{{ source_external_id }}</code>
+                                {% endif %}
+                            </p>
+
+                            {# Both left empty, the video keeps the source it has. #}
+                            <div class="bo-field-grid">
+                                <div class="bo-field bo-field--7">
+                                    {{ form_label(form.url, null, { help: false }) }}
+                                    {% set url_invalid = form.url.vars.errors|length %}
+                                    {{ form_widget(form.url, { attr: {
+                                        class: 'form-control',
+                                        placeholder: 'https://www.youtube.com/watch?v=…',
+                                        'data-testid': 'bo-video-edit-url',
+                                        'aria-describedby': 'bo-video-edit-url-help',
+                                    }|merge(url_invalid ? { 'aria-invalid': 'true' } : {}) }) }}
+                                    <div class="bo-field-grid__help" id="bo-video-edit-url-help">{{ form.url.vars.help }}</div>
+                                    {{ form_errors(form.url) }}
+                                </div>
+                                <div class="bo-field bo-field--5">
+                                    {{ form_label(form.file, null, { help: false }) }}
+                                    {{ form_widget(form.file, { attr: { class: 'form-control', 'data-testid': 'bo-video-edit-file', 'aria-describedby': 'bo-video-edit-file-help' } }) }}
+                                    <div class="bo-field-grid__help" id="bo-video-edit-file-help">{{ form.file.vars.help }}</div>
+                                    {{ form_errors(form.file) }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <h2 class="h5 mb-3">{{ 'Video information'|trans }}</h2>
 
                     <div class="row">
@@ -60,14 +100,6 @@
                                     <div class="text-muted">{{ 'No product image to use as a thumbnail'|trans }}</div>
                                 {% endif %}
                             </div>
-                            <div class="form-text">
-                                {% if hosted %}
-                                    <i class="bi bi-film" aria-hidden="true"></i> {{ 'Hosted by the shop'|trans }}
-                                {% else %}
-                                    <i class="bi bi-play-btn" aria-hidden="true"></i> {{ 'Played from %platform'|trans({ '%platform': provider }) }}
-                                {% endif %}
-                            </div>
-
                             <div class="mb-3 mt-3">
                                 {{ form_widget(form.thumbnail_image_id, { attr: { class: 'form-select', 'data-testid': 'bo-video-edit-thumbnail-choice' } }) }}
                                 {{ form_help(form.thumbnail_image_id) }}
