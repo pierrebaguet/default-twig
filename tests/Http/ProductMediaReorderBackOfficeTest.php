@@ -15,6 +15,8 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Security\AccessManager;
+use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Product;
 use Thelia\Model\ProductImage;
@@ -154,6 +156,45 @@ final class ProductMediaReorderBackOfficeTest extends WebIntegrationTestCase
         self::assertGreaterThanOrEqual(400, $this->client->getResponse()->getStatusCode());
         self::assertSame(1, $this->positionOf($firstImage));
         self::assertSame(2, $this->positionOf($video));
+    }
+
+    public function testAnAdministratorWithoutTheCatalogueIsRefusedOnEveryVideoRoute(): void
+    {
+        [$product, , $video] = $this->productWithMixedMedia();
+
+        // The video routes are guarded on the resource of the parent, like the image
+        // and document ones: an administrator who cannot reach the catalogue reaches
+        // none of them, by a direct address as by a screen.
+        $restricted = $this->factory->restrictedAdmin([AdminResources::ORDER => [AccessManager::VIEW]]);
+        $restricted->eraseCredentials();
+        $this->injector->setAdmin($restricted);
+
+        $reads = [
+            \sprintf('/admin/video/product/%d/list-ajax', $product->getId()),
+            \sprintf('/admin/video/product/%d/form-ajax', $product->getId()),
+            \sprintf('/admin/video/product/%d/%d/update', $product->getId(), $video->getId()),
+        ];
+
+        foreach ($reads as $url) {
+            $this->client->request('GET', $url);
+            self::assertSame(403, $this->client->getResponse()->getStatusCode(), \sprintf('GET "%s" must be refused.', $url));
+        }
+
+        $writes = [
+            \sprintf('/admin/video/product/%d/save-ajax', $product->getId()),
+            \sprintf('/admin/video/product/%d/%d/update', $product->getId(), $video->getId()),
+            \sprintf('/admin/video/product/%d/%d/delete', $product->getId(), $video->getId()),
+            \sprintf('/admin/video/product/%d/%d/toggle', $product->getId(), $video->getId()),
+            \sprintf('/admin/video/product/%d/update-position', $product->getId()),
+            \sprintf('/admin/product/%d/media/reorder', $product->getId()),
+        ];
+
+        foreach ($writes as $url) {
+            $this->client->request('POST', $url);
+            self::assertSame(403, $this->client->getResponse()->getStatusCode(), \sprintf('POST "%s" must be refused.', $url));
+        }
+
+        self::assertSame(1, ProductVideoQuery::create()->filterByProductId($product->getId())->count(), 'Nothing was written.');
     }
 
     /**
