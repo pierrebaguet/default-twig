@@ -2,49 +2,59 @@
 {{ form_start(form, {
     action: path('admin.video.save-ajax', { productId: product_id }),
     method: 'post',
-    attr: { 'data-testid': 'bo-video-add-form', enctype: 'multipart/form-data', 'data-action': 'submit->bo-video-form#submit' },
+    attr: { 'data-testid': 'bo-video-add-form', enctype: 'multipart/form-data', 'data-action': 'submit->bo-video-form#submit', class: 'h-100 d-flex flex-column' },
 }) }}
     <input type="hidden" name="_token" value="{{ assignToken() }}">
 
     <div data-video-form-errors role="alert" aria-live="assertive" id="bo-video-add-errors">
         {{ form_errors(form) }}
         {{ form_errors(form.url) }}
+        {{ form_errors(form.file) }}
     </div>
 
-    <div class="row g-3 align-items-start">
-        <div class="col-md-7">
-            {{ form_label(form.url) }}
-            {# Every refusal this form can raise is about the address — an unknown
-               platform, both sources given, neither given — so the field the merchant
-               has to fix is named invalid whether the violation landed on it or on the
-               form as a whole. #}
+    {# Every field states its label, its input and its help in the three rows the
+       grid shares, so a wording of two lines moves nothing. The help is asked of
+       the label with `help: false` and rendered below the input instead: in the
+       label it would sit between the wording and the field. #}
+    <div class="bo-field-grid">
+        {# One source or the other: the address first, the file as the alternative.
+           Every refusal this form can raise is about the address — an unknown
+           platform, both sources given, neither given — so the field the merchant
+           has to fix is named invalid whether the violation landed on it or on the
+           form as a whole. #}
+        <div class="bo-field bo-field--7">
+            {{ form_label(form.url, null, { help: false }) }}
             {% set url_invalid = form.vars.errors|length or form.url.vars.errors|length %}
             {{ form_widget(form.url, { attr: {
                 class: 'form-control',
-                placeholder: 'https://',
+                placeholder: 'https://www.youtube.com/watch?v=…',
                 'data-testid': 'bo-video-url',
-                'aria-describedby': 'bo-video-add-errors',
+                'aria-describedby': 'bo-video-add-errors bo-video-url-help',
             }|merge(url_invalid ? { 'aria-invalid': 'true' } : {}) }) }}
-            {{ form_help(form.url) }}
+            <div class="bo-field-grid__help" id="bo-video-url-help">{{ form.url.vars.help }}</div>
         </div>
-        <div class="col-md-5">
-            {{ form_label(form.file) }}
-            {{ form_widget(form.file, { attr: { class: 'form-control', 'data-testid': 'bo-video-file' } }) }}
-            {{ form_errors(form.file) }}
-            {{ form_help(form.file) }}
+
+        <div class="bo-field bo-field--5">
+            {{ form_label(form.file, 'Or a video file'|trans, { help: false }) }}
+            {{ form_widget(form.file, { attr: { class: 'form-control', 'data-testid': 'bo-video-file', 'aria-describedby': 'bo-video-file-help' } }) }}
+            <div class="bo-field-grid__help" id="bo-video-file-help">{{ 'Hosted by the shop. MP4, WebM or Ogg.'|trans }}</div>
         </div>
-        <div class="col-md-6">
-            {{ form_label(form.title) }}
+
+        <div class="bo-field bo-field--6">
+            {{ form_label(form.title, null, { help: false }) }}
             {{ form_widget(form.title, { attr: { class: 'form-control', 'data-testid': 'bo-video-title' } }) }}
+            <div class="bo-field-grid__help"></div>
         </div>
-        <div class="col-md-6">
-            {{ form_label(form.alt) }}
-            {{ form_widget(form.alt, { attr: { class: 'form-control', maxlength: 255, 'data-testid': 'bo-video-alt' } }) }}
+
+        <div class="bo-field bo-field--6">
+            {{ form_label(form.alt, null, { help: false }) }}
+            {{ form_widget(form.alt, { attr: { class: 'form-control', maxlength: 255, 'data-testid': 'bo-video-alt', 'aria-describedby': 'bo-video-alt-help' } }) }}
+            <div class="bo-field-grid__help" id="bo-video-alt-help">{{ form.alt.vars.help }}</div>
             {{ form_errors(form.alt) }}
         </div>
     </div>
 
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-auto pt-3 border-top">
         <div class="form-check mb-0">
             {{ form_widget(form.visible, { attr: { class: 'form-check-input', 'data-testid': 'bo-video-visible' } }) }}
             {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}

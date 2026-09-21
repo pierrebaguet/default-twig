@@ -49,7 +49,7 @@ final class VideoType extends AbstractType
             ->add('url', TextType::class, [
                 'required' => false,
                 'label' => $this->translator->trans('Video address'),
-                'help' => $this->translator->trans('The address of the video on its platform. Only the identifier of the video is stored.'),
+                'help' => $this->translator->trans('YouTube, Vimeo or Dailymotion. Only the identifier of the video is stored.'),
             ])
             ->add('file', FileType::class, [
                 'required' => false,

@@ -3,15 +3,16 @@
    sends the whole order back rather than one position: images and videos share
    a single sequence, so the two tables are written together. #}
 {% set with_videos = with_videos|default(false) %}
+{% set sortable = kind == 'image' %}
 <div class="bo-file-list" data-controller="bo-file-list"
      data-bo-file-list-toggle-url-template-value="{{ path(urls.toggle, id_placeholder) }}"
      data-bo-file-list-delete-url-template-value="{{ path(urls.delete, id_placeholder) }}"
      data-bo-file-list-position-url-value="{{ path(urls.position, { parentType: parent_type, parentId: parent_id }) }}"
      {% if with_videos %}data-bo-file-list-reorder-url-value="{{ path('admin.product.media.reorder', { productId: parent_id }) }}"{% endif %}
      data-bo-file-list-token-value="{{ assignToken() }}"
-     data-bo-file-list-sortable-value="{{ kind == 'image' ? 'true' : 'false' }}">
+     data-bo-file-list-sortable-value="{{ sortable ? 'true' : 'false' }}">
     {% if items|length == 0 %}
-        <div class="alert alert-info" data-testid="bo-file-list-empty">
+        <div class="alert alert-info mb-0" data-testid="bo-file-list-empty">
             {% if with_videos %}
                 {{ 'No images or videos yet. Upload an image or add a video with the forms above.'|trans }}
             {% elseif kind == 'image' %}
@@ -21,7 +22,7 @@
             {% endif %}
         </div>
     {% else %}
-        <ul class="list-unstyled row g-3" data-bo-file-list-target="grid" data-testid="bo-file-list-grid">
+        <ul class="list-unstyled row g-3 mb-0" data-bo-file-list-target="grid" data-testid="bo-file-list-grid">
             {# The controller hands the entries in their order: sorting them again here
                would lose the image-first rule on two media sharing a position. #}
             {% for item in items %}
@@ -31,7 +32,7 @@
                         data-media-type="video"
                         data-toggle-url="{{ path('admin.video.toggle.process', { productId: parent_id, videoId: item.id }) }}"
                         data-delete-url="{{ path('admin.video.delete', { productId: parent_id, videoId: item.id }) }}"
-                        data-testid="bo-video-item-{{ item.id }}">
+                        data-testid="bo-video-item-{{ item.id }}"{% if sortable %} style="cursor: grab;"{% endif %}>
                         {% include '@BackOfficeDefaultTwig/file/_video_card.html.twig' with {
                             item: item,
                             rank: loop.index,
@@ -42,52 +43,69 @@
                         } only %}
                     </li>
                 {% else %}
-                <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}" data-media-type="{{ kind }}">
+                {% set edit_url = path(urls.update, kind == 'image' ? { parentType: parent_type, imageId: item.id } : { parentType: parent_type, documentId: item.id }) %}
+                {% set field_id = kind ~ '-' ~ parent_type ~ '-' ~ item.id %}
+                <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}" data-media-type="{{ kind }}"{% if sortable %} style="cursor: grab;"{% endif %}>
                     <div class="card h-100">
-                        {% if kind == 'image' %}
-                            {# The link is named on its own: the thumbnail alt is empty for a
-                               decorative image, and empty for one not described yet. #}
-                            <a href="{{ path(urls.update, { parentType: parent_type, imageId: item.id }) }}"
-                               class="d-flex align-items-center justify-content-center bg-light p-2" style="height: 140px;"
-                               aria-label="{{ 'Edit image %id'|trans({ '%id': item.id }) }}" data-testid="bo-file-thumb">
-                                <img src="{{ item.url }}" alt="{{ item.resolved_alt|default('') }}" class="img-fluid" style="max-height: 100%;">
-                            </a>
-                        {% else %}
-                            <a href="{{ path(urls.update, { parentType: parent_type, documentId: item.id }) }}"
-                               class="d-flex flex-column align-items-center justify-content-center bg-light p-2 text-center" style="height: 140px;" data-testid="bo-file-thumb">
-                                <i class="bi bi-file-earmark fs-1" aria-hidden="true"></i>
-                                <div class="small text-truncate px-2 w-100">{{ item.file }}</div>
-                            </a>
-                        {% endif %}
-                        <div class="card-body p-2 d-flex flex-column">
+                        <div class="position-relative">
+                            {% if kind == 'image' %}
+                                {# The link is named on its own: the thumbnail alt is empty for a
+                                   decorative image, and empty for one not described yet. #}
+                                <a href="{{ edit_url }}"
+                                   class="d-flex align-items-center justify-content-center bg-light p-2 rounded-top" style="height: 140px;"
+                                   aria-label="{{ 'Edit image %id'|trans({ '%id': item.id }) }}" title="{{ 'Edit'|trans }}" data-testid="bo-file-thumb">
+                                    <img src="{{ item.url }}" alt="{{ item.resolved_alt|default('') }}" class="img-fluid" style="max-height: 100%;">
+                                </a>
+                            {% else %}
+                                <a href="{{ edit_url }}"
+                                   class="d-flex flex-column align-items-center justify-content-center bg-light p-2 text-center rounded-top" style="height: 140px;"
+                                   title="{{ 'Edit'|trans }}" data-testid="bo-file-thumb">
+                                    <i class="bi bi-file-earmark fs-1" aria-hidden="true"></i>
+                                    <div class="small text-truncate px-2 w-100">{{ item.file }}</div>
+                                </a>
+                            {% endif %}
+                            <span class="position-absolute top-0 start-0 m-2 badge rounded-pill text-bg-secondary" data-position-label="">#{{ loop.index }}</span>
+                            {% if with_videos %}
+                                <span class="position-absolute top-0 end-0 m-2 badge text-bg-light border"><i class="bi bi-image" aria-hidden="true"></i> {{ 'Image'|trans }}</span>
+                            {% endif %}
+                            {% if not item.visible %}
+                                <span class="position-absolute bottom-0 start-0 m-2 badge text-bg-warning">{{ 'Hidden'|trans }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body p-3 d-flex flex-column">
                             {% if can_update %}
                                 <form method="post" action="{{ path(urls.update_title, kind == 'image' ? { parentType: parent_type, imageId: item.id } : { parentType: parent_type, documentId: item.id }) }}"
-                                      class="mb-2" data-testid="bo-file-title-form-{{ item.id }}">
+                                      class="d-flex flex-column gap-2 flex-grow-1" data-testid="bo-file-title-form-{{ item.id }}">
                                     <input type="hidden" name="_token" value="{{ assignToken() }}">
                                     <input type="hidden" name="success_url" value="">
-                                    <div class="input-group input-group-sm{% if kind == 'image' %} mb-2{% endif %}">
-                                        <input type="text" name="title" value="{{ item.title }}" class="form-control" placeholder="{{ 'Title'|trans }}"
-                                               aria-label="{{ 'Title'|trans }}" data-testid="bo-file-title-input-{{ item.id }}">
-                                        {% if kind != 'image' %}
-                                            <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}">
-                                                <i class="bi bi-check2" aria-hidden="true"></i>
-                                            </button>
-                                        {% endif %}
+                                    <div>
+                                        <label class="form-label small text-muted mb-1" for="title-{{ field_id }}">{{ 'Title'|trans }}</label>
+                                        <input type="text" id="title-{{ field_id }}" name="title" value="{{ item.title }}" class="form-control form-control-sm"
+                                               data-testid="bo-file-title-input-{{ item.id }}">
                                     </div>
                                     {% if kind == 'image' %}
-                                        <div class="input-group input-group-sm mb-1">
-                                            <input type="text" name="alt" value="{{ item.alt|default('') }}" class="form-control"
-                                                   placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}" maxlength="255"
+                                        <div>
+                                            <label class="form-label small text-muted mb-1" for="alt-{{ field_id }}">{{ 'Alternative text'|trans }}</label>
+                                            <input type="text" id="alt-{{ field_id }}" name="alt" value="{{ item.alt|default('') }}" class="form-control form-control-sm" maxlength="255"
                                                    data-alt-field data-action="input->bo-file-list#refreshAltWarning"
                                                    aria-describedby="decorative-hint-{{ parent_type }}-{{ item.id }}"
                                                    data-testid="bo-file-alt-input-{{ item.id }}"
                                                    {% if item.decorative|default(false) %}readonly{% endif %}>
-                                            <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}"
-                                                    data-testid="bo-file-inline-save-{{ item.id }}">
-                                                <i class="bi bi-check2" aria-hidden="true"></i>
-                                            </button>
+                                            <div class="bo-media-card__note mt-1">
+                                                {# Read-only rather than disabled: the field stays on the keyboard path,
+                                                   and says why it cannot be typed in. #}
+                                                <div class="text-muted{% if not item.decorative|default(false) %} d-none{% endif %}"
+                                                     id="decorative-hint-{{ parent_type }}-{{ item.id }}"
+                                                     data-decorative-hint data-testid="bo-file-decorative-hint-{{ item.id }}">
+                                                    {{ 'Silenced for a decorative image'|trans }}
+                                                </div>
+                                                <div class="text-warning-emphasis{% if item.decorative|default(false) or item.alt|default('') is not empty %} d-none{% endif %}"
+                                                     data-alt-warning data-testid="bo-file-alt-warning-{{ item.id }}">
+                                                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ 'No alternative text'|trans }}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="form-check form-check-inline small">
+                                        <div class="form-check small mb-0">
                                             {# The grid always states the flag, checked or not; a caller that sends
                                                nothing leaves it alone, which is what an old title-only link does. #}
                                             <input type="hidden" name="decorative" value="0">
@@ -98,45 +116,21 @@
                                                    {% if item.decorative|default(false) %}checked{% endif %}>
                                             <label class="form-check-label" for="decorative-{{ parent_type }}-{{ item.id }}">{{ 'Decorative image'|trans }}</label>
                                         </div>
-                                        {# Read-only rather than disabled: the field stays on the keyboard path,
-                                           and says why it cannot be typed in. #}
-                                        <div class="small text-muted{% if not item.decorative|default(false) %} d-none{% endif %}"
-                                             id="decorative-hint-{{ parent_type }}-{{ item.id }}"
-                                             data-decorative-hint data-testid="bo-file-decorative-hint-{{ item.id }}">
-                                            {{ 'Silenced for a decorative image'|trans }}
-                                        </div>
-                                        <div class="small text-warning-emphasis{% if item.decorative|default(false) or item.alt|default('') is not empty %} d-none{% endif %}"
-                                             data-alt-warning data-testid="bo-file-alt-warning-{{ item.id }}">
-                                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ 'No alternative text'|trans }}
-                                        </div>
                                     {% endif %}
+                                    <div class="d-flex justify-content-between align-items-center gap-2 pt-2 mt-auto border-top">
+                                        <button type="submit" name="save_mode" value="stay" class="btn btn-sm btn-outline-primary"
+                                                data-testid="bo-file-inline-save-{{ item.id }}">
+                                            <i class="bi bi-check2" aria-hidden="true"></i> {{ 'Save'|trans }}
+                                        </button>
+                                        {% include '@BackOfficeDefaultTwig/file/_card_actions.html.twig' with { item: item, testid_prefix: 'bo-file', can_update: can_update, can_delete: can_delete } only %}
+                                    </div>
                                 </form>
                             {% else %}
-                                <div class="small fw-semibold text-truncate mb-2">{{ item.title }}</div>
-                            {% endif %}
-                            <div class="d-flex gap-2 justify-content-between align-items-center small text-muted mt-auto">
-                                <span data-position-label="">#{{ loop.index }}</span>
-                                <div class="btn-group btn-group-sm">
-                                    {% if can_update %}
-                                        <button type="button" class="btn btn-outline-secondary" data-action="bo-file-list#toggle"
-                                                data-bo-file-list-id-param="{{ item.id }}"
-                                                title="{{ item.visible ? 'Hide'|trans : 'Show'|trans }}"
-                                                data-label-show="{{ 'Show'|trans }}"
-                                                data-label-hide="{{ 'Hide'|trans }}"
-                                                data-testid="bo-file-toggle-{{ item.id }}">
-                                            <i class="bi bi-eye{% if not item.visible %}-slash{% endif %}" aria-hidden="true"></i>
-                                        </button>
-                                    {% endif %}
-                                    {% if can_delete %}
-                                        <button type="button" class="btn btn-outline-danger" data-action="bo-file-list#delete"
-                                                data-bo-file-list-id-param="{{ item.id }}"
-                                                title="{{ 'Delete'|trans }}"
-                                                data-testid="bo-file-delete-{{ item.id }}">
-                                            <i class="bi bi-trash" aria-hidden="true"></i>
-                                        </button>
-                                    {% endif %}
+                                <div class="fw-semibold text-truncate">{{ item.title }}</div>
+                                <div class="d-flex justify-content-end pt-2 mt-auto border-top">
+                                    {% include '@BackOfficeDefaultTwig/file/_card_actions.html.twig' with { item: item, testid_prefix: 'bo-file', can_update: can_update, can_delete: can_delete } only %}
                                 </div>
-                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </li>

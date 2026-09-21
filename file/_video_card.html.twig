@@ -1,24 +1,32 @@
-{# The card of a video in the media grid of a product. Same footprint as an image
-   card: a thumbnail, the inline wording, the position and the actions. #}
+{# The card of a video in the media grid of a product. Same shape as an image card:
+   the visual with its rank, the wording, then one footer with the save and the actions. #}
 {% set provider_icons = { youtube: 'bi-youtube', vimeo: 'bi-vimeo', dailymotion: 'bi-play-btn', file: 'bi-film' } %}
 <div class="card h-100">
-    {# Named on its own: the thumbnail alt may legitimately be empty. #}
-    <a href="{{ path('admin.video.update.view', { productId: product_id, videoId: item.id }) }}"
-       class="d-flex align-items-center justify-content-center bg-light p-2 position-relative" style="height: 140px;"
-       aria-label="{{ 'Edit video %id'|trans({ '%id': item.id }) }}"
-       data-testid="bo-video-thumb-{{ item.id }}">
-        {% if item.thumbnail_url %}
-            <img src="{{ item.thumbnail_url }}" alt="{{ item.resolved_alt }}" class="img-fluid" style="max-height: 100%;">
-        {% else %}
-            <i class="bi bi-film fs-1 text-muted" aria-hidden="true"></i>
-        {% endif %}
-        <span class="position-absolute top-0 start-0 m-1 badge text-bg-dark" data-testid="bo-video-provider-{{ item.id }}">
+    <div class="position-relative">
+        {# Named on its own: the thumbnail alt may legitimately be empty. #}
+        <a href="{{ path('admin.video.update.view', { productId: product_id, videoId: item.id }) }}"
+           class="d-flex align-items-center justify-content-center bg-light p-2 rounded-top" style="height: 140px;"
+           aria-label="{{ 'Edit video %id'|trans({ '%id': item.id }) }}"
+           title="{{ 'Edit'|trans }}"
+           data-testid="bo-video-thumb-{{ item.id }}">
+            {% if item.thumbnail_url %}
+                <img src="{{ item.thumbnail_url }}" alt="{{ item.resolved_alt }}" class="img-fluid" style="max-height: 100%;">
+            {% else %}
+                <i class="bi bi-film fs-1 text-muted" aria-hidden="true"></i>
+            {% endif %}
+        </a>
+        <span class="position-absolute top-0 start-0 m-2 badge rounded-pill text-bg-secondary" data-position-label="">#{{ rank|default(item.position) }}</span>
+        <span class="position-absolute top-0 end-0 m-2 badge text-bg-dark" data-testid="bo-video-provider-{{ item.id }}">
             <i class="bi {{ provider_icons[item.provider]|default('bi-play-btn') }}" aria-hidden="true"></i> {{ item.provider_label }}
         </span>
-    </a>
-    <div class="card-body p-2 d-flex flex-column">
+        {% if not item.visible %}
+            <span class="position-absolute bottom-0 start-0 m-2 badge text-bg-warning">{{ 'Hidden'|trans }}</span>
+        {% endif %}
+    </div>
+    <div class="card-body p-3 d-flex flex-column">
         {% if can_update %}
             <form method="post" action="{{ path('admin.video.update.process', { productId: product_id, videoId: item.id }) }}"
+                  class="d-flex flex-column gap-2 flex-grow-1"
                   data-testid="bo-video-inline-form-{{ item.id }}">
                 {# The inline form submits the whole edition form: the fields it does not
                    show travel as they are stored, so a quick title fix never blanks them. #}
@@ -34,51 +42,37 @@
                 {% if item.visible %}
                     <input type="hidden" name="thelia_product_video_modification[visible]" value="1">
                 {% endif %}
-                <div class="input-group input-group-sm mb-2">
-                    <input type="text" name="thelia_product_video_modification[title]" value="{{ item.title }}" class="form-control"
-                           placeholder="{{ 'Title'|trans }}" aria-label="{{ 'Title'|trans }}"
-                           data-testid="bo-video-title-input-{{ item.id }}">
+                <div>
+                    <label class="form-label small text-muted mb-1" for="video-title-{{ item.id }}">{{ 'Title'|trans }}</label>
+                    <input type="text" id="video-title-{{ item.id }}" name="thelia_product_video_modification[title]" value="{{ item.title }}"
+                           class="form-control form-control-sm" data-testid="bo-video-title-input-{{ item.id }}">
                 </div>
-                <div class="input-group input-group-sm mb-1">
-                    <input type="text" name="thelia_product_video_modification[alt]" value="{{ item.alt }}" class="form-control"
-                           placeholder="{{ 'Alternative text'|trans }}" aria-label="{{ 'Alternative text'|trans }}" maxlength="255"
+                <div>
+                    <label class="form-label small text-muted mb-1" for="video-alt-{{ item.id }}">{{ 'Alternative text'|trans }}</label>
+                    <input type="text" id="video-alt-{{ item.id }}" name="thelia_product_video_modification[alt]" value="{{ item.alt }}"
+                           class="form-control form-control-sm" maxlength="255"
                            data-alt-field data-action="input->bo-file-list#refreshAltWarning"
                            data-testid="bo-video-alt-input-{{ item.id }}">
-                    <button type="submit" name="save_mode" value="stay" class="btn btn-outline-primary" title="{{ 'Save'|trans }}"
-                            data-testid="bo-video-inline-save-{{ item.id }}">
-                        <i class="bi bi-check2" aria-hidden="true"></i>
-                    </button>
+                    <div class="bo-media-card__note mt-1">
+                        <div class="text-warning-emphasis{% if item.alt is not empty %} d-none{% endif %}"
+                             data-alt-warning data-testid="bo-video-alt-warning-{{ item.id }}">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ 'No alternative text'|trans }}
+                        </div>
+                    </div>
                 </div>
-                <div class="small text-warning-emphasis{% if item.alt is not empty %} d-none{% endif %}"
-                     data-alt-warning data-testid="bo-video-alt-warning-{{ item.id }}">
-                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ 'No alternative text'|trans }}
+                <div class="d-flex justify-content-between align-items-center gap-2 pt-2 mt-auto border-top">
+                    <button type="submit" name="save_mode" value="stay" class="btn btn-sm btn-outline-primary"
+                            data-testid="bo-video-inline-save-{{ item.id }}">
+                        <i class="bi bi-check2" aria-hidden="true"></i> {{ 'Save'|trans }}
+                    </button>
+                    {% include '@BackOfficeDefaultTwig/file/_card_actions.html.twig' with { item: item, testid_prefix: 'bo-video', can_update: can_update, can_delete: can_delete } only %}
                 </div>
             </form>
         {% else %}
-            <div class="small fw-semibold text-truncate mb-2">{{ item.title }}</div>
-        {% endif %}
-        <div class="d-flex gap-2 justify-content-between align-items-center small text-muted mt-auto">
-            <span data-position-label="">#{{ rank|default(item.position) }}</span>
-            <div class="btn-group btn-group-sm">
-                {% if can_update %}
-                    <button type="button" class="btn btn-outline-secondary" data-action="bo-file-list#toggle"
-                            data-bo-file-list-id-param="{{ item.id }}"
-                            title="{{ item.visible ? 'Hide'|trans : 'Show'|trans }}"
-                            data-label-show="{{ 'Show'|trans }}"
-                            data-label-hide="{{ 'Hide'|trans }}"
-                            data-testid="bo-video-toggle-{{ item.id }}">
-                        <i class="bi bi-eye{% if not item.visible %}-slash{% endif %}" aria-hidden="true"></i>
-                    </button>
-                {% endif %}
-                {% if can_delete %}
-                    <button type="button" class="btn btn-outline-danger" data-action="bo-file-list#delete"
-                            data-bo-file-list-id-param="{{ item.id }}"
-                            title="{{ 'Delete'|trans }}"
-                            data-testid="bo-video-delete-{{ item.id }}">
-                        <i class="bi bi-trash" aria-hidden="true"></i>
-                    </button>
-                {% endif %}
+            <div class="fw-semibold text-truncate">{{ item.title }}</div>
+            <div class="d-flex justify-content-end pt-2 mt-auto border-top">
+                {% include '@BackOfficeDefaultTwig/file/_card_actions.html.twig' with { item: item, testid_prefix: 'bo-video', can_update: can_update, can_delete: can_delete } only %}
             </div>
-        </div>
+        {% endif %}
     </div>
 </div>
