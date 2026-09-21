@@ -46,7 +46,10 @@ use Thelia\Tools\TokenProvider;
 use Twig\Environment;
 
 /**
- * The videos of a product, in the back-office.
+ * The videos of a product, in the back-office. They are listed and added on the
+ * images tab of the product, in the same grid as its images; this controller
+ * carries what is specific to a video: adding one, editing one, and the actions
+ * of its card.
  *
  * The address a merchant pastes is turned into a platform and an identifier as
  * soon as it is submitted, and nothing else of it is kept or rendered: no page
@@ -56,7 +59,6 @@ use Twig\Environment;
 final class VideoController
 {
     private const RESOURCE = AdminResources::PRODUCT;
-    private const FORM_NAME = 'thelia_product_video_creation';
     private const EDIT_FORM_NAME = 'thelia_product_video_modification';
 
     public function __construct(
@@ -75,6 +77,11 @@ final class VideoController
     ) {
     }
 
+    /**
+     * The videos of a product on their own, for a shop where a module owns the
+     * images tab through `item.edition.images`: the media grid is not rendered
+     * there, so the videos get a panel of their own below the module's screen.
+     */
     #[Route('/admin/video/product/{productId}/list-ajax', name: 'admin.video.list-ajax', methods: ['GET'], requirements: ['productId' => '\d+'])]
     public function videoList(int $productId, Request $request): Response
     {
@@ -88,12 +95,11 @@ final class VideoController
     #[Route('/admin/video/product/{productId}/form-ajax', name: 'admin.video.form-ajax', methods: ['GET'], requirements: ['productId' => '\d+'])]
     public function videoForm(int $productId, Request $request): Response
     {
-        if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::VIEW)) {
+        if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
             return $denied;
         }
 
         return new Response($this->twig->render('@BackOfficeDefaultTwig/file/_video_form.html.twig', [
-            'product_id' => $productId,
             'form' => $this->createAddForm()->createView(),
         ] + $this->listContext($productId, $request)));
     }
@@ -337,7 +343,7 @@ final class VideoController
 
     private function createAddForm(): FormInterface
     {
-        return $this->formFactory->createNamed(self::FORM_NAME, VideoType::class, ['visible' => true]);
+        return $this->formFactory->createNamed(VideoType::NAME, VideoType::class, ['visible' => true]);
     }
 
     /**
@@ -413,7 +419,7 @@ final class VideoController
 
     private function productUrl(int $productId): string
     {
-        return $this->urls->generate('admin.products.update', ['product_id' => $productId, 'current_tab' => 'videos']);
+        return $this->urls->generate('admin.products.update', ['product_id' => $productId, 'current_tab' => 'images']);
     }
 
     private function currentEditLocale(Request $request): string

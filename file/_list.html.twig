@@ -1,13 +1,20 @@
 {% set id_placeholder = kind == 'image' ? { parentType: parent_type, imageId: 0 } : { parentType: parent_type, documentId: 0 } %}
+{# On the images tab of a product the videos are in the grid too, and a drop
+   sends the whole order back rather than one position: images and videos share
+   a single sequence, so the two tables are written together. #}
+{% set with_videos = with_videos|default(false) %}
 <div class="bo-file-list" data-controller="bo-file-list"
      data-bo-file-list-toggle-url-template-value="{{ path(urls.toggle, id_placeholder) }}"
      data-bo-file-list-delete-url-template-value="{{ path(urls.delete, id_placeholder) }}"
      data-bo-file-list-position-url-value="{{ path(urls.position, { parentType: parent_type, parentId: parent_id }) }}"
+     {% if with_videos %}data-bo-file-list-reorder-url-value="{{ path('admin.product.media.reorder', { productId: parent_id }) }}"{% endif %}
      data-bo-file-list-token-value="{{ assignToken() }}"
      data-bo-file-list-sortable-value="{{ kind == 'image' ? 'true' : 'false' }}">
     {% if items|length == 0 %}
         <div class="alert alert-info" data-testid="bo-file-list-empty">
-            {% if kind == 'image' %}
+            {% if with_videos %}
+                {{ 'No images or videos yet. Upload an image or add a video with the forms above.'|trans }}
+            {% elseif kind == 'image' %}
                 {{ 'No images yet. Upload some with the form above.'|trans }}
             {% else %}
                 {{ 'No documents yet. Upload some with the form above.'|trans }}
@@ -15,8 +22,27 @@
         </div>
     {% else %}
         <ul class="list-unstyled row g-3" data-bo-file-list-target="grid" data-testid="bo-file-list-grid">
-            {% for item in items|sort((a, b) => a.position <=> b.position) %}
-                <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}">
+            {# The controller hands the entries in their order: sorting them again here
+               would lose the image-first rule on two media sharing a position. #}
+            {% for item in items %}
+                {% set type = item.type|default(kind) %}
+                {% if type == 'video' %}
+                    <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}"
+                        data-media-type="video"
+                        data-toggle-url="{{ path('admin.video.toggle.process', { productId: parent_id, videoId: item.id }) }}"
+                        data-delete-url="{{ path('admin.video.delete', { productId: parent_id, videoId: item.id }) }}"
+                        data-testid="bo-video-item-{{ item.id }}">
+                        {% include '@BackOfficeDefaultTwig/file/_video_card.html.twig' with {
+                            item: item,
+                            rank: loop.index,
+                            product_id: parent_id,
+                            edit_locale: edit_locale|default(''),
+                            can_update: can_update,
+                            can_delete: can_delete,
+                        } only %}
+                    </li>
+                {% else %}
+                <li class="col-12 col-md-6 col-xl-4" data-bo-file-list-target="item" data-file-id="{{ item.id }}" data-media-type="{{ kind }}">
                     <div class="card h-100">
                         {% if kind == 'image' %}
                             {# The link is named on its own: the thumbnail alt is empty for a
@@ -89,7 +115,7 @@
                                 <div class="small fw-semibold text-truncate mb-2">{{ item.title }}</div>
                             {% endif %}
                             <div class="d-flex gap-2 justify-content-between align-items-center small text-muted mt-auto">
-                                <span data-position-label="">#{{ item.position }}</span>
+                                <span data-position-label="">#{{ loop.index }}</span>
                                 <div class="btn-group btn-group-sm">
                                     {% if can_update %}
                                         <button type="button" class="btn btn-outline-secondary" data-action="bo-file-list#toggle"
@@ -114,6 +140,7 @@
                         </div>
                     </div>
                 </li>
+                {% endif %}
             {% endfor %}
         </ul>
     {% endif %}

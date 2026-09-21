@@ -1,6 +1,4 @@
-{{ safe_hook('tab-video.top', { id: product_id, type: 'product' }) }}
-
-<div class="bo-video-panel card mb-3" data-controller="bo-video-form"
+<div class="bo-video-panel card mt-3" data-controller="bo-video-form"
      data-bo-video-form-list-url-value="{{ path('admin.video.list-ajax', { productId: product_id }) }}"
      data-bo-video-form-added-message-value="{{ 'The video was added.'|trans }}"
      data-bo-video-form-failed-message-value="{{ 'This video could not be added.'|trans }}"
@@ -22,5 +20,3 @@
         } only %}
     </div>
 </div>
-
-{{ safe_hook('tab-video.bottom', { id: product_id, type: 'product' }) }}

@@ -7,6 +7,9 @@ export default class extends Controller {
         toggleUrlTemplate: String,
         deleteUrlTemplate: String,
         positionUrl: String,
+        // Set on the media grid of a product, where images and videos share one
+        // sequence: a drop posts the whole order instead of one position.
+        reorderUrl: String,
         token: String,
         sortable: { type: Boolean, default: false },
     };
@@ -95,6 +98,10 @@ export default class extends Controller {
         this.placeholder = null;
         const newPosition = this.itemTargets.indexOf(this.dragged) + 1;
         this.refreshPositionLabels();
+        if (this.reorderUrlValue) {
+            this.persistOrder();
+            return;
+        }
         this.persist(this.dragged.dataset.fileId, newPosition);
     }
 
@@ -118,13 +125,30 @@ export default class extends Controller {
         });
     }
 
+    // Every card of the grid, first card first, as `type:id` entries: the server
+    // refuses a list that no longer matches the product, and the page reloads on
+    // any refusal so the grid shows the media as they are.
+    persistOrder() {
+        const body = new URLSearchParams();
+        this.itemTargets.forEach((item) => {
+            body.append('order[]', `${item.dataset.mediaType || 'image'}:${item.dataset.fileId}`);
+        });
+        body.set('_token', this.tokenValue);
+
+        this.post(this.reorderUrlValue, body);
+    }
+
     persist(fileId, position) {
         const body = new URLSearchParams();
         body.set('file_id', String(fileId));
         body.set('position', String(position));
         body.set('_token', this.tokenValue);
 
-        fetch(this.positionUrlValue, {
+        this.post(this.positionUrlValue, body);
+    }
+
+    post(url, body) {
+        fetch(url, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -204,7 +228,8 @@ export default class extends Controller {
             : (button.dataset.labelShow || '');
 
         const id = String(event.params.id);
-        const url = (this.toggleUrlTemplateValue || '').replace(/\/0(?=\/toggle|$)/, `/${id}`);
+        const item = button.closest('[data-bo-file-list-target="item"]');
+        const url = item?.dataset.toggleUrl || (this.toggleUrlTemplateValue || '').replace(/\/0(?=\/toggle|$)/, `/${id}`);
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -245,7 +270,7 @@ export default class extends Controller {
             item.style.pointerEvents = 'none';
         }
 
-        const url = (this.deleteUrlTemplateValue || '').replace(/\/0$/, `/${id}`).replace(/\/0(?=\/)/, `/${id}`);
+        const url = item?.dataset.deleteUrl || (this.deleteUrlTemplateValue || '').replace(/\/0$/, `/${id}`).replace(/\/0(?=\/)/, `/${id}`);
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -259,6 +284,7 @@ export default class extends Controller {
                 throw new Error(`HTTP ${response.status}`);
             }
             item?.remove();
+            this.refreshPositionLabels();
         } catch (e) {
             if (item) {
                 item.style.opacity = '';

@@ -34,6 +34,9 @@ use Thelia\Domain\Media\Video\VideoProviderResolver;
  */
 final class VideoType extends AbstractType
 {
+    /** The name the add form is posted under, on the product images tab. */
+    public const NAME = 'thelia_product_video_creation';
+
     public function __construct(
         private readonly TranslatorInterface $translator,
         private readonly VideoProviderResolver $providers,

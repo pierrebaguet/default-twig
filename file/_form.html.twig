@@ -1,28 +1,59 @@
 {{ safe_hook(kind == 'image' ? 'tab-image.top' : 'tab-document.top', { id: parent_id, type: parent_type }) }}
 
+{% set with_videos = video_form is defined and video_form is not null %}
 {% if kind == 'image' and has_hook('item.edition.images') %}
 {{ safe_hook('item.edition.images', { itemType: parent_type, itemId: parent_id, resource: 'admin.' ~ parent_type }) }}
+{# A module that owns the images tab shows its own images: the videos of the product
+   then get a panel of their own, so that they can still be added and arranged. #}
+{% if with_videos %}
+    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\VideoController::videoForm', { productId: parent_id })) }}
+{% endif %}
 {% else %}
-<div class="bo-file-upload card mb-3" data-controller="bo-file-upload"
+{# On the images tab of a product, a video is added next to the images and lands in
+   the same grid: the two forms refresh the one list below them. #}
+<div class="bo-file-upload card mb-3" data-controller="bo-file-upload{% if with_videos %} bo-video-form{% endif %}"
      data-bo-file-upload-save-url-value="{{ path(urls.save, { parentType: parent_type, parentId: parent_id }) }}"
      data-bo-file-upload-list-url-value="{{ path(urls.list, { parentType: parent_type, parentId: parent_id }) }}"
-     data-bo-file-upload-token-value="{{ assignToken() }}">
+     data-bo-file-upload-token-value="{{ assignToken() }}"
+     {% if with_videos %}
+     data-bo-video-form-list-url-value="{{ path(urls.list, { parentType: parent_type, parentId: parent_id }) }}"
+     data-bo-video-form-added-message-value="{{ 'The video was added.'|trans }}"
+     data-bo-video-form-failed-message-value="{{ 'This video could not be added.'|trans }}"
+     data-testid="bo-video-panel"
+     {% endif %}>
     <div class="card-body">
-        <form method="post" enctype="multipart/form-data" class="d-flex flex-column gap-2"
-              data-testid="bo-file-upload-form-{{ kind }}"
-              data-action="submit->bo-file-upload#submit">
-            <input type="file" name="file" class="form-control" required
-                   data-bo-file-upload-target="input"
-                   accept="{{ kind == 'image' ? 'image/*' : '*' }}">
-            <button type="submit" class="btn btn-primary align-self-start" data-testid="bo-file-upload-submit-{{ kind }}">
-                <i class="bi bi-cloud-upload" aria-hidden="true"></i>
-                {% if kind == 'image' %}{{ 'Upload images'|trans }}{% else %}{{ 'Upload documents'|trans }}{% endif %}
-            </button>
-        </form>
-        <div class="mt-3" data-bo-file-upload-target="status" hidden></div>
+        <div class="row g-4">
+            <div class="{% if with_videos %}col-lg-5{% else %}col-12{% endif %}">
+                {% if with_videos %}
+                    <h3 class="h6 text-uppercase text-muted mb-3">{{ 'Images'|trans }}</h3>
+                {% endif %}
+                <form method="post" enctype="multipart/form-data" class="d-flex flex-column gap-2"
+                      data-testid="bo-file-upload-form-{{ kind }}"
+                      data-action="submit->bo-file-upload#submit">
+                    <input type="file" name="file" class="form-control" required
+                           data-bo-file-upload-target="input"
+                           accept="{{ kind == 'image' ? 'image/*' : '*' }}">
+                    <button type="submit" class="btn btn-primary align-self-start" data-testid="bo-file-upload-submit-{{ kind }}">
+                        <i class="bi bi-cloud-upload" aria-hidden="true"></i>
+                        {% if kind == 'image' %}{{ 'Upload images'|trans }}{% else %}{{ 'Upload documents'|trans }}{% endif %}
+                    </button>
+                </form>
+                <div class="mt-3" data-bo-file-upload-target="status" hidden></div>
+            </div>
+            {% if with_videos %}
+                <div class="col-lg-7">
+                    <h3 class="h6 text-uppercase text-muted mb-3">{{ 'Videos'|trans }}</h3>
+                    <div data-bo-video-form-target="form">
+                        {% include '@BackOfficeDefaultTwig/file/_video_add_fields.html.twig' with { product_id: parent_id, form: video_form } only %}
+                    </div>
+                    {# Outside the swapped fragment, so what it says survives the answer it announces. #}
+                    <div class="mt-2" role="status" aria-live="polite" data-bo-video-form-target="status" data-testid="bo-video-status"></div>
+                </div>
+            {% endif %}
+        </div>
     </div>
 
-    <div class="card-body pt-0" data-bo-file-upload-target="list">
+    <div class="card-body pt-0" data-bo-file-upload-target="list"{% if with_videos %} data-bo-video-form-target="list"{% endif %}>
     {% include '@BackOfficeDefaultTwig/file/_list.html.twig' with {
         kind: kind,
         parent_type: parent_type,
@@ -31,6 +62,7 @@
         can_update: true,
         can_delete: true,
         urls: urls,
+        with_videos: with_videos,
     } only %}
     </div>
 </div>

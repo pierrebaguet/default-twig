@@ -16,7 +16,9 @@ namespace BackOfficeDefaultTwigBundle\Controller\File;
 
 use BackOfficeDefaultTwigBundle\Form\File\DocumentMetadataType;
 use BackOfficeDefaultTwigBundle\Form\File\ImageMetadataType;
+use BackOfficeDefaultTwigBundle\Form\File\VideoType;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
+use BackOfficeDefaultTwigBundle\Service\File\ProductVideoPresenter;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormError;
@@ -78,6 +80,7 @@ final class FileController
         private readonly MediaFacade $media,
         private readonly AltTextResolver $altText,
         private readonly LoggerInterface $logger,
+        private readonly ProductVideoPresenter $videoPresenter,
     ) {
     }
 
@@ -122,6 +125,46 @@ final class FileController
     public function imageUpdatePosition(string $parentType, int $parentId, Request $request): Response
     {
         return $this->handlePosition('image', $parentType, $request, TheliaEvents::IMAGE_UPDATE_POSITION);
+    }
+
+    /**
+     * The images tab of a product shows its images and its videos in one grid, and a
+     * drop sends the whole order back: `order[]` entries of the form `image:12` or
+     * `video:3`, first entry first. Every medium of the product has to be named, so
+     * that a stale grid cannot half-reorder the sheet.
+     */
+    #[Route('/admin/product/{productId}/media/reorder', name: 'admin.product.media.reorder', methods: ['POST'], requirements: ['productId' => '\d+'])]
+    public function reorderProductMedia(int $productId, Request $request): Response
+    {
+        if ($denied = $this->access->check(AdminResources::PRODUCT, [], AccessManager::UPDATE)) {
+            return $denied;
+        }
+
+        $this->checkCsrf();
+
+        $order = [];
+        foreach ($request->request->all('order') as $entry) {
+            if (!\is_string($entry) || 1 !== preg_match('/^(image|video):(\d+)$/', $entry, $matches)) {
+                return new JsonResponse(['error' => $this->translator->trans('Malformed media order.')], Response::HTTP_BAD_REQUEST);
+            }
+            $order[] = ['type' => $matches[1], 'id' => (int) $matches[2]];
+        }
+
+        if ([] === $order) {
+            return new JsonResponse(['error' => $this->translator->trans('Malformed media order.')], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->media->reorderProductMedia($productId, $order);
+        } catch (\InvalidArgumentException $exception) {
+            // The grid the admin dragged no longer matches the product: the page
+            // reloads on this answer and shows the media as they are.
+            $this->logger->notice('Product media reorder refused.', ['exception' => $exception, 'product_id' => $productId]);
+
+            return new JsonResponse(['error' => $this->translator->trans('The media of this product have changed, the page will reload.')], Response::HTTP_CONFLICT);
+        }
+
+        return new JsonResponse(['status' => 'ok']);
     }
 
     // `update-title` stays as an alias of the same method: the inline form now also
@@ -524,6 +567,8 @@ final class FileController
             'can_update' => $canUpdate,
             'can_delete' => $canDelete,
             'urls' => $this->urlsFor($kind, $parentType),
+            'edit_locale' => $this->currentEditLocale(),
+            'with_videos' => $this->showsVideos($kind, $parentType),
         ]));
     }
 
@@ -539,7 +584,18 @@ final class FileController
             'parent_type' => $parentType,
             'parent_id' => $parentId,
             'urls' => $this->urlsFor($kind, $parentType),
+            'video_form' => $this->showsVideos($kind, $parentType)
+                ? $this->formFactory->createNamed(VideoType::NAME, VideoType::class, ['visible' => true])->createView()
+                : null,
         ]));
+    }
+
+    /**
+     * Only a product has videos, and they sit with its images: one grid, one order.
+     */
+    private function showsVideos(string $kind, string $parentType): bool
+    {
+        return 'image' === $kind && 'product' === $parentType;
     }
 
     private function handleSave(string $kind, string $parentType, int $parentId, Request $request): Response
@@ -666,7 +722,11 @@ final class FileController
     }
 
     /**
-     * @return list<array{id: int, title: string, alt: string, decorative: bool, resolved_alt: string, file: string, visible: bool, position: int, url: string}>
+     * The entries of the grid, by position. On the images tab of a product the videos
+     * are in the list too, told apart by `type`; two media on the same position keep
+     * the image first, the way the front office shows them.
+     *
+     * @return list<array<string, mixed>>
      */
     private function fetchItems(string $kind, string $parentType, int $parentId): array
     {
@@ -696,6 +756,7 @@ final class FileController
             $alt = method_exists($record, 'getAlt') ? (string) $record->getAlt() : '';
             $decorative = method_exists($record, 'getDecorative') && (bool) $record->getDecorative();
             $items[] = [
+                'type' => $kind,
                 'id' => (int) $record->getId(),
                 'title' => $title,
                 'alt' => $alt,
@@ -707,6 +768,16 @@ final class FileController
                 'url' => $this->fileUrl($kind, $parentType, $record),
             ];
         }
+
+        if (!$this->showsVideos($kind, $parentType)) {
+            return $items;
+        }
+
+        foreach ($this->videoPresenter->items($parentId, $locale) as $video) {
+            $items[] = $video + ['type' => 'video', 'decorative' => false, 'file' => '', 'url' => $video['thumbnail_url']];
+        }
+
+        usort($items, static fn (array $a, array $b): int => $a['position'] <=> $b['position']);
 
         return $items;
     }
