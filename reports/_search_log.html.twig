@@ -1,0 +1,97 @@
+{#
+    Searches without result, read from the log of the optional TntSearch module.
+
+    Expects `search_log`, a BackOfficeDefaultTwigBundle\DTO\Report\SearchLogReport.
+    Search terms are user input: they rely on the default autoescape.
+#}
+{% set availability = search_log.availability.value %}
+<div data-testid="report-search-log">
+    <div data-testid="report-search-log-state-{{ availability }}">
+        {% if availability == 'module_missing' %}
+            <div class="alert alert-info mb-0">
+                {{ 'Install and activate the TntSearch module to see the searches without result'|trans }}
+                <a href="{{ path('admin.module') }}" class="alert-link ms-1">{{ 'Modules'|trans }}</a>
+            </div>
+        {% elseif availability == 'module_inactive' %}
+            <div class="alert alert-info mb-0">
+                {{ 'The TntSearch module is installed but not activated'|trans }}
+                <a href="{{ path('admin.module') }}" class="alert-link ms-1">{{ 'Modules'|trans }}</a>
+            </div>
+        {% elseif availability == 'table_missing' %}
+            <div class="alert alert-info mb-0">{{ 'The TntSearch module has no search log yet'|trans }}</div>
+        {% else %}
+            {% set with_counter = availability == 'with_counter' %}
+
+            {% if search_log.synonymsUrl %}
+                <div class="d-flex justify-content-end mb-3">
+                    <a href="{{ search_log.synonymsUrl }}" class="btn btn-outline-secondary btn-sm" data-testid="report-search-synonyms-link">
+                        <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+                        {{ 'Manage the search synonyms'|trans }}
+                    </a>
+                </div>
+            {% endif %}
+
+            <h3 class="h6">{{ 'Searches without result'|trans }}</h3>
+            {% if search_log.zeroResultTerms is empty %}
+                <p class="text-muted small" data-testid="report-search-log-zero-empty">{{ 'No search without result has been logged.'|trans }}</p>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle" data-testid="report-search-log-zero-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">{{ 'Term'|trans }}</th>
+                                <th scope="col">{{ 'Language'|trans }}</th>
+                                {% if with_counter %}
+                                    <th scope="col" class="text-end">{{ 'Searches'|trans }}</th>
+                                {% else %}
+                                    <th scope="col" class="text-end">{{ 'Hits'|trans }}</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for term in search_log.zeroResultTerms %}
+                                <tr>
+                                    <td>{{ term.words }}</td>
+                                    <td>{{ term.locale }}</td>
+                                    <td class="text-end">{{ with_counter ? term.searches : term.hits }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+
+            {% if with_counter %}
+                <h3 class="h6 mt-4">{{ 'Most searched terms'|trans }}</h3>
+                {% if search_log.topTerms is empty %}
+                    <p class="text-muted small" data-testid="report-search-log-top-empty">{{ 'No search has been logged.'|trans }}</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle" data-testid="report-search-log-top-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{{ 'Term'|trans }}</th>
+                                    <th scope="col">{{ 'Language'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Searches'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Hits'|trans }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for term in search_log.topTerms %}
+                                    <tr>
+                                        <td>{{ term.words }}</td>
+                                        <td>{{ term.locale }}</td>
+                                        <td class="text-end">{{ term.searches }}</td>
+                                        <td class="text-end">{{ term.hits }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            {% else %}
+                <p class="text-muted small mb-0">{{ 'TntSearch 4.0 does not record how often a term is searched: update the module to 4.1 to see the counts'|trans }}</p>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>

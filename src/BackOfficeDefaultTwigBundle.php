@@ -16,12 +16,20 @@ namespace BackOfficeDefaultTwigBundle;
 
 use BackOfficeDefaultTwigBundle\DependencyInjection\Compiler\BackOfficeTwigOnlyCompilerPass;
 use BackOfficeDefaultTwigBundle\Hook\Attribute\AsHook;
+use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\SearchLogReader;
+use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\SearchLogReaderFactory;
+use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\TntSearchSchemaProbe;
+use Propel\Runtime\Connection\ConnectionInterface;
+use Propel\Runtime\Propel;
 use Symfony\Component\AssetMapper\AssetMapperInterface;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
+
+use function Symfony\Component\DependencyInjection\Loader\Configurator\inline_service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 final class BackOfficeDefaultTwigBundle extends AbstractBundle
 {
@@ -82,6 +90,16 @@ final class BackOfficeDefaultTwigBundle extends AbstractBundle
 
         $container->services()
             ->alias(\Thelia\Core\Security\Resource\AdminResources::class, 'thelia.admin.resources');
+
+        // The search log belongs to the optional TntSearch module: the reader is
+        // chosen at runtime from the module state and the schema, never by type.
+        $container->services()
+            ->set(TntSearchSchemaProbe::class)
+            ->args([inline_service(ConnectionInterface::class)->factory([Propel::class, 'getConnection'])]);
+
+        $container->services()
+            ->set(SearchLogReader::class)
+            ->factory([service(SearchLogReaderFactory::class), 'create']);
     }
 
     public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void
