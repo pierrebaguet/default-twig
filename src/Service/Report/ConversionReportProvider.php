@@ -66,7 +66,7 @@ final readonly class ConversionReportProvider
 
     private const LOWER_BOUND_HINT = 'Lower bound: the choice is cleared when the shopper goes back to the cart page.';
 
-    private const ORDERS_HINT = 'Orders are compared with the carts holding a line, not with the previous step, which is a lower bound.';
+    private const ORDERS_HINT = 'Compared with the carts holding a line: the previous step is a lower bound.';
 
     public function __construct(
         private ConversionFunnelCalculator $calculator,
