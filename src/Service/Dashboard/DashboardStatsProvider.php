@@ -63,6 +63,7 @@ final readonly class DashboardStatsProvider
         private UrlGeneratorInterface $urls,
         private TranslatorInterface $translator,
         private SecurityContext $securityContext,
+        private PeriodOptions $periodOptions,
     ) {
     }
 
@@ -143,7 +144,7 @@ final readonly class DashboardStatsProvider
             lowStockProducts: $canViewProducts ? $this->products->findLowStock(self::LOW_STOCK_THRESHOLD, self::LOW_STOCK_LIMIT, $locale) : [],
             lowStockThreshold: self::LOW_STOCK_THRESHOLD,
             alerts: $this->buildAlerts($canViewOrders),
-            periodOptions: $this->buildPeriodOptions($range),
+            periodOptions: $this->periodOptions->build($range, 'admin.home'),
             locale: $locale,
             showRevenueChart: $canViewOrders,
             showOrderStatus: $canViewOrders,
@@ -240,33 +241,6 @@ final readonly class DashboardStatsProvider
         ];
 
         return $alerts;
-    }
-
-    /**
-     * @return list<array{value: string, label: string, active: bool, url: string}>
-     */
-    private function buildPeriodOptions(DateRange $current): array
-    {
-        $labels = [
-            DateRange::PRESET_TODAY => $this->translator->trans('Today'),
-            DateRange::PRESET_SEVEN_DAYS => $this->translator->trans('7 days'),
-            DateRange::PRESET_THIRTY_DAYS => $this->translator->trans('30 days'),
-            DateRange::PRESET_NINETY_DAYS => $this->translator->trans('90 days'),
-            DateRange::PRESET_THIS_MONTH => $this->translator->trans('This month'),
-            DateRange::PRESET_THIS_YEAR => $this->translator->trans('This year'),
-        ];
-
-        $options = [];
-        foreach (DateRange::ALLOWED_PRESETS as $preset) {
-            $options[] = [
-                'value' => $preset,
-                'label' => $labels[$preset],
-                'active' => $preset === $current->preset,
-                'url' => $this->urls->generate('admin.home', ['period' => $preset]),
-            ];
-        }
-
-        return $options;
     }
 
     private function variation(float $current, float $previous): ?float

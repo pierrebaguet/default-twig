@@ -1,0 +1,155 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{#
+    Reports > Conversion.
+
+    Expects `report`, a BackOfficeDefaultTwigBundle\DTO\Report\ConversionReport,
+    and `current_tab` ('funnel' or 'search').
+#}
+
+{% block title %}{{ 'Conversion'|trans }}{% endblock %}
+{% block body_testid %}reports-conversion{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item">{{ 'Reports'|trans }}</li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Conversion'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    {{ safe_hook('reports.conversion.top', { location: 'reports_conversion_top' }) }}
+
+    <div class="container-fluid" data-testid="report-conversion">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h1 class="h3 mb-0">{{ 'Conversion'|trans }}</h1>
+            {% if report.exportUrl %}
+                <a href="{{ report.exportUrl }}" class="btn btn-outline-secondary btn-sm" data-testid="report-export-link">
+                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                    {{ 'Export the daily detail'|trans }}
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div class="d-flex flex-wrap gap-1" data-testid="report-period-options">
+                {% for option in report.periodOptions %}
+                    <a href="{{ option.url }}" class="btn btn-sm {{ option.active ? 'btn-primary' : 'btn-outline-secondary' }}"
+                       data-testid="report-period-{{ option.value }}"{% if option.active %} aria-current="true"{% endif %}>{{ option.label }}</a>
+                {% endfor %}
+            </div>
+            <span class="text-muted small" data-testid="report-range">
+                {{ report.coverage.from|date('d/m/Y') }} - {{ report.coverage.to|date('d/m/Y') }}
+            </span>
+        </div>
+
+        <p class="text-muted small mb-3" data-testid="report-funnel-scope">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+            {{ 'This funnel is rebuilt from the carts and the orders of the period. It does not count page views: use a web analytics tool for the visit funnel.'|trans }}
+        </p>
+
+        <div class="bo-tab-bar">
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if current_tab == 'funnel' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-funnel" type="button" role="tab" data-testid="report-tab-funnel">
+                        {{ 'Checkout funnel'|trans }}
+                    </button>
+                </li>
+                {% if report.searchLog is not null %}
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link {% if current_tab == 'search' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-search" type="button" role="tab" data-testid="report-tab-search">
+                            {{ 'Searches without result'|trans }}
+                        </button>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <div class="tab-content">
+            <div class="tab-pane fade {% if current_tab == 'funnel' %}show active{% endif %}" id="tab-funnel" role="tabpanel">
+                {% if report.coverage.truncated %}
+                    <div class="alert alert-info d-flex align-items-start gap-2" data-testid="report-coverage-notice">
+                        <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+                        <span>{{ 'No cart created before %date% is kept in the database (the maintenance command purges carts after %days% days): the funnel and the rate are computed from %date% to %to%. Older orders stay visible on the dashboard.'|trans({
+                            '%date%': report.coverage.from|date('d/m/Y'),
+                            '%days%': report.coverage.retentionDays,
+                            '%to%': report.coverage.to|date('d/m/Y'),
+                        }) }}</span>
+                    </div>
+                {% endif %}
+
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-body d-flex flex-wrap align-items-center gap-4">
+                        <div>
+                            <div class="text-muted small">{{ 'Conversion rate'|trans }}</div>
+                            <div class="display-6 fw-semibold" data-testid="report-conversion-rate">
+                                {% if report.conversionRatePercent is not null %}
+                                    {{ report.conversionRatePercent|number_format(1, ',', ' ') }} %
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="text-muted" data-testid="report-conversion-formula">
+                            = {{ report.conversionFormula }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-0">
+                        <table class="table table-sm table-hover align-middle mb-0" data-testid="report-funnel-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="ps-3">{{ 'Step'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Count'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ '% of previous step'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ '% of carts with a line'|trans }}</th>
+                                    <th scope="col" class="w-25 pe-3"><span class="visually-hidden">{{ 'Share of carts with a line'|trans }}</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for step in report.steps %}
+                                    <tr data-testid="report-step-{{ step.key }}">
+                                        <td class="ps-3">
+                                            <div>{{ step.label }}</div>
+                                            {% if step.hint %}
+                                                <div class="text-muted small" data-testid="report-step-hint">{{ step.hint }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end fw-semibold">{{ step.count|number_format(0, ',', ' ') }}</td>
+                                        <td class="text-end">
+                                            {{ step.percentToPrevious is not null ? step.percentToPrevious|number_format(1, ',', ' ') ~ ' %' : '—' }}
+                                        </td>
+                                        <td class="text-end">
+                                            {{ loop.first or step.percentToBase is null ? '—' : step.percentToBase|number_format(1, ',', ' ') ~ ' %' }}
+                                        </td>
+                                        <td class="pe-3">
+                                            {#- The created carts are not read against the base: no bar, like the "—" beside them. -#}
+                                            {% if not loop.first %}
+                                            <div class="progress" role="progressbar" aria-label="{{ step.label }}" aria-valuenow="{{ step.barWidth }}" aria-valuemin="0" aria-valuemax="100">
+                                                <div class="progress-bar" style="width: {{ step.barWidth }}%"></div>
+                                            </div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {% if report.searchLog is not null %}
+                <div class="tab-pane fade {% if current_tab == 'search' %}show active{% endif %}" id="tab-search" role="tabpanel">
+                    {% include '@BackOfficeDefaultTwig/reports/_search_log.html.twig' with { search_log: report.searchLog } only %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {{ safe_hook('reports.conversion.bottom', { location: 'reports_conversion_bottom' }) }}
+{% endblock %}
