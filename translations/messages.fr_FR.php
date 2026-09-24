@@ -1447,6 +1447,7 @@ return [
     'Order total with taxes' => 'Total commande TTC',
     'Ordered products' => 'Produits commandés',
     'Orders' => 'Commandes',
+    'Orders are compared with the carts holding a line, not with the previous step, which is a lower bound.' => 'Les commandes sont rapportées aux paniers avec une ligne, pas à l\'étape précédente, qui est une valeur minimale.',
     'Orders for this customer' => 'Commandes de ce client',
     'Orders in this status are handled as if they had the selected status.' => 'Les commandes dans ce statut sont traitées comme si elles avaient le statut sélectionné.',
     'Orders management' => 'Gestion des commandes',

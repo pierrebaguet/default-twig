@@ -93,7 +93,9 @@ final class ConversionReportProviderTest extends IntegrationTestCase
         self::assertNull($report->steps[0]->hint);
         self::assertNotNull($report->steps[2]->hint);
         self::assertNotNull($report->steps[3]->hint);
-        self::assertNull($report->steps[4]->hint);
+        self::assertNull($report->steps[4]->percentToPrevious, 'Orders are not compared with the payment step, a lower bound.');
+        self::assertNotNull($report->steps[4]->hint);
+        self::assertNull($report->steps[5]->hint);
 
         self::assertCount(\count(DateRange::ALLOWED_PRESETS), $report->periodOptions);
         self::assertStringContainsString('/admin/reports/conversion?period=', $report->periodOptions[0]['url']);

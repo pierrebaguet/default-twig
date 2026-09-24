@@ -64,6 +64,10 @@ final readonly class ConversionReportProvider
         FunnelStep::CARTS_WITH_PAYMENT,
     ];
 
+    private const LOWER_BOUND_HINT = 'Lower bound: the choice is cleared when the shopper goes back to the cart page.';
+
+    private const ORDERS_HINT = 'Orders are compared with the carts holding a line, not with the previous step, which is a lower bound.';
+
     public function __construct(
         private ConversionFunnelCalculator $calculator,
         private CartRepository $carts,
@@ -93,12 +97,10 @@ final readonly class ConversionReportProvider
                 key: $step->key,
                 label: $this->translator->trans(self::STEP_LABELS[$step->key], [], null, $locale),
                 count: $step->count,
-                percentToPrevious: $step->percentToPrevious(),
+                percentToPrevious: FunnelStep::ORDERS_CREATED === $step->key ? null : $step->percentToPrevious(),
                 percentToBase: $percentToBase,
                 barWidth: null === $percentToBase ? 0 : (int) round(max(0.0, min(100.0, $percentToBase))),
-                hint: \in_array($step->key, self::LOWER_BOUND_STEPS, true)
-                    ? $this->translator->trans('Lower bound: the choice is cleared when the shopper goes back to the cart page.', [], null, $locale)
-                    : null,
+                hint: $this->stepHint($step->key, $locale),
             );
         }
 
@@ -116,6 +118,19 @@ final readonly class ConversionReportProvider
             searchLog: $searchLog,
             exportUrl: $this->exportUrl(),
         );
+    }
+
+    private function stepHint(string $key, string $locale): ?string
+    {
+        if (\in_array($key, self::LOWER_BOUND_STEPS, true)) {
+            return $this->translator->trans(self::LOWER_BOUND_HINT, [], null, $locale);
+        }
+
+        if (FunnelStep::ORDERS_CREATED === $key) {
+            return $this->translator->trans(self::ORDERS_HINT, [], null, $locale);
+        }
+
+        return null;
     }
 
     private function exportUrl(): ?string
