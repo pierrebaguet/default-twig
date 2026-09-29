@@ -100,44 +100,52 @@
                 </div>
 
                 <div class="card shadow-sm border-0">
-                    <div class="card-body p-0">
-                        <table class="table table-sm table-hover align-middle mb-0" data-testid="report-funnel-table">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 bo-table-wrap bo-funnel" data-testid="report-funnel-table">
+                            <caption class="visually-hidden">{{ 'Checkout funnel'|trans }}</caption>
                             <thead>
                                 <tr>
-                                    <th scope="col" class="ps-3 w-50">{{ 'Step'|trans }}</th>
-                                    <th scope="col" class="text-end">{{ 'Count'|trans }}</th>
-                                    <th scope="col" class="text-end">{{ '% of previous step'|trans }}</th>
-                                    <th scope="col" class="text-end">{{ '% of carts with a line'|trans }}</th>
-                                    <th scope="col" class="w-25 pe-3"><span class="visually-hidden">{{ 'Share of carts with a line'|trans }}</span></th>
+                                    <th scope="col" class="bo-funnel__label">{{ 'Step'|trans }}</th>
+                                    <th scope="col" class="bo-funnel__num text-end">{{ 'Count'|trans }}</th>
+                                    <th scope="col" class="bo-funnel__num text-end">{{ 'vs previous step'|trans }}</th>
+                                    <th scope="col" class="bo-funnel__share">{{ 'vs carts with a line'|trans }}</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for step in report.steps %}
-                                    <tr data-testid="report-step-{{ step.key }}">
-                                        <td class="ps-3">
-                                            <div>{{ step.label }}</div>
-                                            {% if step.hint %}
-                                                <div class="text-muted small" data-testid="report-step-hint">{{ step.hint }}</div>
-                                            {% endif %}
-                                        </td>
-                                        <td class="text-end fw-semibold">{{ step.count|number_format(0, ',', ' ') }}</td>
-                                        <td class="text-end">
-                                            {{ step.percentToPrevious is not null ? step.percentToPrevious|number_format(1, ',', ' ') ~ ' %' : '—' }}
-                                        </td>
-                                        <td class="text-end">
-                                            {{ loop.first or step.percentToBase is null ? '—' : step.percentToBase|number_format(1, ',', ' ') ~ ' %' }}
-                                        </td>
-                                        <td class="pe-3">
-                                            {#- The created carts are not read against the base: no bar, like the "—" beside them. -#}
-                                            {% if not loop.first %}
-                                            <div class="progress" role="progressbar" aria-label="{{ step.label }}" aria-valuenow="{{ step.barWidth }}" aria-valuemin="0" aria-valuemax="100">
-                                                <div class="progress-bar" style="width: {{ step.barWidth }}%"></div>
+                            {% for step in report.steps %}
+                                {% if loop.index0 == 0 or loop.index0 == 4 %}
+                                    {% if not loop.first %}</tbody>{% endif %}
+                                    <tbody>
+                                        <tr class="bo-funnel__group">
+                                            <th scope="rowgroup" colspan="4">{{ (loop.first ? 'Carts' : 'Orders')|trans }}</th>
+                                        </tr>
+                                {% endif %}
+                                <tr data-testid="report-step-{{ step.key }}">
+                                    <th scope="row" class="bo-funnel__label">
+                                        {{ step.label }}
+                                        {% if step.hint %}
+                                            <span class="bo-funnel__hint" data-testid="report-step-hint">{{ step.hint }}</span>
+                                        {% endif %}
+                                    </th>
+                                    <td class="bo-funnel__num text-end fw-semibold">{{ step.count|number_format(0, ',', ' ') }}</td>
+                                    <td class="bo-funnel__num text-end">
+                                        {{ step.percentToPrevious is not null ? step.percentToPrevious|number_format(1, ',', ' ') ~ ' %' : '—' }}
+                                    </td>
+                                    <td class="bo-funnel__share">
+                                        {#- The created carts are not read against the base: no bar, like the "—" beside them. -#}
+                                        {% if loop.first or step.percentToBase is null %}
+                                            <span class="d-block text-end bo-funnel__share-value">—</span>
+                                        {% else %}
+                                            <div class="bo-funnel__bar">
+                                                <div class="progress" role="progressbar" aria-label="{{ step.label }}" aria-valuenow="{{ step.barWidth }}" aria-valuemin="0" aria-valuemax="100">
+                                                    <div class="progress-bar" style="width: {{ step.barWidth }}%"></div>
+                                                </div>
+                                                <span class="bo-funnel__share-value">{{ step.percentToBase|number_format(1, ',', ' ') }} %</span>
                                             </div>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% if loop.last %}</tbody>{% endif %}
+                            {% endfor %}
                         </table>
                     </div>
                 </div>

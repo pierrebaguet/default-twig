@@ -14,8 +14,6 @@ declare(strict_types=1);
 
 // Back-office Twig French catalogue (domain 'core'). Generated then curated.
 return [
-    '% of carts with a line' => '% des paniers avec une ligne',
-    '% of previous step' => '% de l\'étape précédente',
     '%action failed: %error' => '%action a échoué : %error',
     '%active% / %total% active' => '%active% / %total% actifs',
     '%count% accessories added' => '%count% accessoire(s) ajouté(s)',
@@ -135,6 +133,7 @@ return [
     'Backup code' => 'Code de secours',
     'Backup codes' => 'Codes de secours',
     'Business activity code, 4 digits and one letter.' => 'Code d\'activité de l\'entreprise, 4 chiffres et une lettre.',
+    'Carts' => 'Paniers',
     'Carts created' => 'Paniers créés',
     'Carts with at least one line' => 'Paniers avec au moins une ligne',
     'Checkout' => 'Tunnel de commande',
@@ -151,7 +150,7 @@ return [
     'Colour' => 'Couleur',
     'Company identifiers' => 'Identifiants d\'entreprise',
     'Company registration number' => 'Numéro d\'immatriculation de l\'entreprise',
-    'Compared with the carts holding a line: the previous step is a lower bound.' => 'Rapporté aux paniers avec une ligne : l\'étape précédente est une valeur minimale.',
+    'Compared with the carts with at least one line.' => 'Rapporté aux paniers avec au moins une ligne.',
     'Condition' => 'État',
     'Conditions can be added once the promotion is saved. Without a single one, it applies to every cart.' => 'Les conditions s\'ajoutent une fois la promotion enregistrée. Sans aucune condition, elle s\'applique à tous les paniers.',
     'Continue' => 'Continuer',
@@ -229,7 +228,7 @@ return [
     'Items of the triggering products' => 'Des articles des produits déclencheurs',
     'Keep these backup codes somewhere safe. Each one works once, and they will not be shown again.' => 'Conservez ces codes de secours en lieu sûr. Chacun ne fonctionne qu\'une fois, et ils ne seront plus affichés.',
     'Lines' => 'Lignes',
-    'Lower bound: the choice is cleared when the shopper goes back to the cart page.' => 'Valeur minimale : le choix est effacé quand l\'acheteur revient sur la page panier.',
+    'Lower bound: cleared when the shopper goes back to the cart.' => 'Valeur minimale : effacé si l\'acheteur revient au panier.',
     'Mark as expired' => 'Marquer comme expiré',
     'Mark as settled' => 'Marquer comme soldé',
     'Merge' => 'Fusionner',
@@ -2004,6 +2003,8 @@ return [
     'Virtual product (no physical shipping)' => 'Produit virtuel (pas d\'expédition physique)',
     'Visible' => 'Visible',
     'Visible in front' => 'Visible en front',
+    'vs carts with a line' => 'vs paniers avec une ligne',
+    'vs previous step' => 'vs étape préc.',
     'Warning' => 'Attention',
     'Warnings' => 'Avertissements',
     'Weight' => 'Poids',

@@ -2219,6 +2219,91 @@ tr.bo-order-row--urgent {
     hr { margin: 1rem 0; }
 }
 
+// ---------- Reports: conversion funnel ----------
+
+// The funnel reads as two groups of steps, carts then orders: roomy rows, labels
+// allowed to wrap (the table carries `.bo-table-wrap`), figures aligned in fixed
+// columns and the share of carts with a line drawn next to its value.
+.table.bo-funnel {
+    // The theme's cards are tinted: the rows are painted white, as the dashboard lists are.
+    --bs-table-bg: #{$white};
+
+    > thead > tr > th {
+        padding-block: .75rem;
+    }
+
+    > tbody > tr > td,
+    > tbody > tr > th {
+        padding-block: .85rem;
+    }
+
+    > tbody > tr > th[scope="row"] {
+        font-weight: 500;
+        color: $body-color;
+    }
+
+    .bo-funnel__label {
+        min-width: 12rem;
+        padding-inline-start: 1.25rem;
+    }
+
+    .bo-funnel__hint {
+        display: block;
+        max-width: 40rem;
+        margin-top: .2rem;
+        font-size: .8125rem;
+        font-weight: 400;
+        line-height: 1.4;
+        color: $gray-600;
+    }
+
+    .bo-funnel__num {
+        width: 7rem;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .bo-funnel__share {
+        width: 16.5rem;
+        padding-inline-end: 1.25rem;
+        white-space: nowrap;
+    }
+
+    > thead > tr > th.bo-funnel__share {
+        white-space: normal;
+    }
+
+    .bo-funnel__bar {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+
+        .progress {
+            --bs-progress-bg: #{$gray-200};
+            flex: 1 1 auto;
+            height: .5rem;
+        }
+    }
+
+    .bo-funnel__share-value {
+        display: inline-block;
+        min-width: 3.75rem;
+        text-align: end;
+        font-variant-numeric: tabular-nums;
+    }
+
+    > tbody > tr.bo-funnel__group > th {
+        padding-block: .45rem;
+        padding-inline-start: 1.25rem;
+        background-color: $body-bg;
+        font-size: .75rem;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: $gray-600;
+    }
+}
+
 // ---------- Tag picker ----------
 // Chip input over the tag multi-select of a customer screen. Built to read as
 // one form control: the wrapper carries the border and the focus ring the

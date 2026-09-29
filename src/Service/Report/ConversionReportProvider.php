@@ -64,9 +64,9 @@ final readonly class ConversionReportProvider
         FunnelStep::CARTS_WITH_PAYMENT,
     ];
 
-    private const LOWER_BOUND_HINT = 'Lower bound: the choice is cleared when the shopper goes back to the cart page.';
+    private const LOWER_BOUND_HINT = 'Lower bound: cleared when the shopper goes back to the cart.';
 
-    private const ORDERS_HINT = 'Compared with the carts holding a line: the previous step is a lower bound.';
+    private const ORDERS_HINT = 'Compared with the carts with at least one line.';
 
     public function __construct(
         private ConversionFunnelCalculator $calculator,
