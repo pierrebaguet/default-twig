@@ -210,6 +210,39 @@ TheliaBlocks) are all wired. A hook code that is **not** emitted is considered d
 Twig back-office. Open an issue if your module needs one that is missing. The `<screen>.js` /
 `<entity>.edit-js` script hooks are emitted on a per-screen basis as screens are migrated.
 
+#### Adding a section to the customer sheet
+
+The customer sheet is made of collapsible sections (overview, addresses, orders, carts). A module
+adds its own section, for internal notes, support messages or recently viewed products, through
+one of these hooks. The context holds `customer`, `customer_id` and `id`, all the customer id.
+
+| Hook | Kind | What the module returns |
+|---|---|---|
+| `customer.tab` | `hook_block` | `{ id, title, content }` for a section rendered with the page, or `{ id, title, href }` for a section whose body is fetched from `href` the first time it opens |
+| `customer.tab-content` | `hook_cards` | HTML, shown in a card of its own in the *Modules* section |
+| `customer-edit.actions` | `safe_hook` | a button next to the sheet navigation, e.g. to open an order for the customer |
+
+A URL given as `href` answers a plain `GET` with an HTML fragment, and has to apply the customer
+access check itself (`AdminResources::CUSTOMER`, `VIEW`). The title is escaped; the content is the
+module's own markup and is rendered as is. A listener that throws is logged and its section left
+out: the sheet still renders. No listener, no section.
+
+```php
+public static function getSubscribedHooks(): array
+{
+    return ['customer.tab' => [['type' => 'back', 'method' => 'onCustomerTab']]];
+}
+
+public function onCustomerTab(HookRenderBlockEvent $event): void
+{
+    $event->add([
+        'id' => 'my-notes',
+        'title' => $this->trans('Notes', [], MyModule::DOMAIN_NAME),
+        'href' => '/admin/module/MyModule/customer-notes?customer_id='.(int) $event->getArgument('customer_id'),
+    ]);
+}
+```
+
 ## Tests
 
 - **PHPStan**: `ddev exec composer phpstan` (baseline 60 errors).

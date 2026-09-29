@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
+use BackOfficeDefaultTwigBundle\Tests\Support\QueryCounter;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Core\Event\Hook\HookRenderBlockEvent;
@@ -38,6 +39,14 @@ use Thelia\Tests\Support\BackOffice\AdminSessionInjector;
  */
 final class CustomerSheetTest extends WebIntegrationTestCase
 {
+    /**
+     * Measured on the sheet with 200 orders: 40 queries on a cold request, 21 once the
+     * request-scoped memos are warm (37 and 19 before the figures and the sections). The
+     * cold count moves by one between runs, hence the margin.
+     */
+    private const COLD_QUERY_BUDGET = 41;
+    private const WARM_QUERY_BUDGET = 21;
+
     private AdminSessionInjector $injector;
 
     private FixtureFactory $factory;
@@ -341,6 +350,34 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         self::assertCount(1, $token, 'The sheet offers to send a reset link.');
 
         return (string) $token->attr('value');
+    }
+
+    /**
+     * Two hundred orders in every status: the sheet costs the same number of queries as
+     * with a handful, and the carts are not read until their section opens. The budget
+     * is the count measured on this sheet, so a query per order or per row breaks it.
+     */
+    public function testACustomerWithTwoHundredOrdersOpensWithinAFixedQueryBudget(): void
+    {
+        $customer = $this->customer();
+        $codes = [OrderStatus::CODE_PAID, OrderStatus::CODE_SENT, OrderStatus::CODE_CANCELED, OrderStatus::CODE_NOT_PAID, OrderStatus::CODE_PROCESSING, OrderStatus::CODE_REFUNDED];
+        for ($i = 0; $i < 200; ++$i) {
+            $this->factory->order($customer, ['statusCode' => $codes[$i % \count($codes)], 'postage' => '10']);
+        }
+        $admin = $this->factory->admin();
+        $admin->eraseCredentials();
+        $this->injector->setAdmin($admin);
+        $url = '/admin/customer/update?customer_id='.$customer->getId();
+
+        $cold = QueryCounter::count(function () use ($url): void {
+            $this->client->request('GET', $url);
+        });
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        $warm = QueryCounter::count(function () use ($url): void {
+            $this->client->request('GET', $url);
+        });
+        self::assertLessThanOrEqual(self::COLD_QUERY_BUDGET, $cold);
+        self::assertLessThanOrEqual(self::WARM_QUERY_BUDGET, $warm);
     }
 
     private function listen(string $eventName, callable $listener): void
