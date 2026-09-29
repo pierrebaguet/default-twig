@@ -22,6 +22,8 @@ use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Core\Template\TemplateDefinition;
 use Thelia\Model\Admin;
+use Thelia\Model\AdminLogQuery;
+use Thelia\Model\Config;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Customer;
 use Thelia\Model\OrderStatus;
@@ -237,6 +239,108 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         $crawler = $this->sheet($this->customer(), $this->factory->admin());
 
         self::assertCount(1, $crawler->filter('[data-testid="customer-modules-section"] [data-testid="module-card-body"]'));
+    }
+
+    public function testAPasswordResetLinkIsSentAndLeavesATraceInTheAdminLog(): void
+    {
+        $customer = $this->customer();
+        $crawler = $this->sheet($customer, $this->factory->admin());
+        $this->givenAStoreEmail();
+
+        $this->client->request('POST', '/admin/customer/password-reset-link', [
+            'customer_id' => $customer->getId(),
+            '_token' => $this->resetToken($crawler),
+        ]);
+
+        self::assertTrue($this->client->getResponse()->isRedirect());
+        $messages = self::getMailerMessages();
+        self::assertCount(1, $messages, 'One mail left.');
+        self::assertStringContainsString((string) $customer->getEmail(), implode(',', array_map(static fn ($address): string => $address->getAddress(), $messages[0]->getTo())));
+        self::assertStringContainsString('/password/reset/'.$customer->getId().'.', (string) $messages[0]->getHtmlBody(), 'The mail carries the core reset link.');
+
+        $trace = AdminLogQuery::create()->filterByResource(AdminResources::CUSTOMER)->filterByResourceId($customer->getId())->filterByMessage('Password reset link sent to customer ID '.$customer->getId())->count();
+        self::assertSame(1, $trace, 'The admin log keeps a trace of the link sent.');
+
+        $crawler = $this->client->followRedirect();
+        self::assertCount(1, $crawler->filter('[data-testid="bo-flash-success"]'));
+    }
+
+    public function testAGuestCustomerHasNoResetButtonAndGetsNoLink(): void
+    {
+        $guest = $this->factory->guestCustomer($this->factory->customerTitle());
+        $crawler = $this->sheet($guest, $this->factory->admin());
+
+        self::assertCount(0, $crawler->filter('[data-testid="customer-password-reset-button"]'));
+
+        // The session token, as the personal data export link carries it.
+        parse_str((string) parse_url((string) $crawler->filter('[data-testid="customer-personal-data-export"]')->attr('href'), \PHP_URL_QUERY), $query);
+        $token = (string) ($query['_token'] ?? '');
+        self::assertNotSame('', $token);
+        $this->givenAStoreEmail();
+        $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $guest->getId(), '_token' => $token]);
+
+        self::assertCount(0, self::getMailerMessages());
+        self::assertCount(1, $this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]'));
+    }
+
+    public function testAFourthLinkInTheSameHourIsRefused(): void
+    {
+        $customer = $this->customer();
+        $token = $this->resetToken($this->sheet($customer, $this->factory->admin()));
+        $this->givenAStoreEmail();
+
+        $sent = 0;
+        for ($attempt = 1; $attempt <= 4; ++$attempt) {
+            $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $customer->getId(), '_token' => $token]);
+            $sent += \count(self::getMailerMessages());
+        }
+
+        self::assertSame(3, $sent, 'Three links an hour, then the sheet refuses.');
+        self::assertCount(1, $this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]'));
+    }
+
+    public function testAResetRequestWithoutTheSessionTokenIsRefused(): void
+    {
+        $customer = $this->customer();
+        $this->sheet($customer, $this->factory->admin());
+
+        $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $customer->getId(), '_token' => 'forged']);
+
+        self::assertCount(0, self::getMailerMessages());
+        self::assertSame(0, AdminLogQuery::create()->filterByResourceId($customer->getId())->filterByMessage('Password reset link sent%', \Propel\Runtime\ActiveQuery\Criteria::LIKE)->count());
+    }
+
+    public function testAnAdministratorWhoMayNotEditTheCustomerCannotSendALink(): void
+    {
+        $customer = $this->customer();
+        $admin = $this->factory->restrictedAdmin([AdminResources::CUSTOMER => [AccessManager::VIEW]]);
+        $crawler = $this->sheet($customer, $admin);
+
+        self::assertCount(0, $crawler->filter('[data-testid="customer-password-reset-button"]'));
+
+        $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $customer->getId(), '_token' => 'irrelevant']);
+
+        self::assertSame(403, $this->client->getResponse()->getStatusCode());
+        self::assertCount(0, self::getMailerMessages());
+    }
+
+    /**
+     * The test shop has no sender address, and the mail refuses to leave without one.
+     * Written after the first request: a config write before it loses the session.
+     */
+    private function givenAStoreEmail(): void
+    {
+        $config = ConfigQuery::create()->findOneByName('store_email') ?? (new Config())->setName('store_email');
+        $config->setValue('shop@example.com')->save($this->getPropelConnection());
+        ConfigQuery::resetCache();
+    }
+
+    private function resetToken(Crawler $crawler): string
+    {
+        $token = $crawler->filter('[data-testid="customer-password-reset-form"] input[name="_token"]');
+        self::assertCount(1, $token, 'The sheet offers to send a reset link.');
+
+        return (string) $token->attr('value');
     }
 
     private function listen(string $eventName, callable $listener): void

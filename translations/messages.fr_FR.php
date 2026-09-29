@@ -2136,4 +2136,11 @@ return [
     'Overview' => 'Vue d\'ensemble',
     'Carts' => 'Paniers',
     'Unable to load this section.' => 'Impossible de charger cette section.',
+    'Send a password reset link' => 'Envoyer un lien de réinitialisation du mot de passe',
+    'A password reset link was sent to %email%.' => 'Un lien de réinitialisation du mot de passe a été envoyé à %email%.',
+    'The password reset link could not be sent: check the mail settings of the shop.' => 'Le lien de réinitialisation n\'a pas pu être envoyé : vérifiez la configuration des courriels de la boutique.',
+    'This customer ordered without an account: there is no password to reset.' => 'Ce client a commandé sans créer de compte : il n\'a pas de mot de passe à réinitialiser.',
+    'This customer has no email address.' => 'Ce client n\'a pas d\'adresse e-mail.',
+    'A password reset link was already sent to this customer several times in the last hour.' => 'Un lien de réinitialisation a déjà été envoyé plusieurs fois à ce client dans la dernière heure.',
+    'The form has expired. Reload the page and try again.' => 'Le formulaire a expiré. Rechargez la page et réessayez.',
 ];

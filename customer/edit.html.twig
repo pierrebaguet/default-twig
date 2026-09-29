@@ -28,6 +28,15 @@
                 {% endif %}
             </h1>
             <div class="d-flex flex-wrap align-items-center gap-2" data-testid="customer-edit-actions">
+                {% if not customer.isGuest and is_granted('UPDATE', 'admin.customer') %}
+                    <form method="post" action="{{ path('admin.customer.password_reset_link') }}" class="d-inline" data-testid="customer-password-reset-form">
+                        <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                        <input type="hidden" name="_token" value="{{ assignToken() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="customer-password-reset-button">
+                            <i class="bi bi-envelope-arrow-up" aria-hidden="true"></i> {{ 'Send a password reset link'|trans }}
+                        </button>
+                    </form>
+                {% endif %}
                 {# A module opening an order for the customer puts its button here. #}
                 {{ safe_hook('customer-edit.actions', { customer_id: customer.id, location: 'customer-edit-actions' }) }}
                 {% include '@BackOfficeDefaultTwig/_prev_next_buttons.html.twig' with {
