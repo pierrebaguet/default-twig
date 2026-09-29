@@ -27,6 +27,7 @@ use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerFilterPresenter;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerFilters;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerListRowPresenter;
+use BackOfficeDefaultTwigBundle\Service\Customer\CustomerOverviewProvider;
 use BackOfficeDefaultTwigBundle\Service\I18n\CountryStateProvider;
 use BackOfficeDefaultTwigBundle\Service\I18n\StateChoiceProvider;
 use BackOfficeDefaultTwigBundle\Service\Tag\TagSwatch;
@@ -94,6 +95,7 @@ final class CustomerController
         private readonly MailerFactory $mailer,
         private readonly TagService $tags,
         private readonly TagSwatch $swatch,
+        private readonly CustomerOverviewProvider $overviewProvider,
     ) {
     }
 
@@ -224,7 +226,10 @@ final class CustomerController
 
         $customerId = (int) $customer->getId();
         $navigation = $this->customerRepository->findPreviousNext($customer);
-        $ordersTotal = $this->orderRepository->countByCustomer($customerId);
+        $overview = $this->overviewProvider->compute($customer, new \DateTimeImmutable());
+
+        // The orders are not even read for an administrator who may not see them.
+        $ordersTotal = $overview->canViewOrders ? $this->orderRepository->countByCustomer($customerId) : 0;
         $ordersPage = max(1, (int) $request->query->get('orders_page', 1));
         $ordersPerPage = 20;
         $ordersLastPage = max(1, (int) ceil($ordersTotal / $ordersPerPage));
@@ -235,7 +240,8 @@ final class CustomerController
             'has_address' => $hasAddress,
             'addresses' => $this->addressRows($customer),
             'address_create_form' => $addressCreateForm->createView(),
-            'recent_orders' => $this->customerOrdersPage($customerId, $ordersPage, $ordersPerPage),
+            'overview' => $overview,
+            'recent_orders' => $overview->canViewOrders ? $this->customerOrdersPage($customerId, $ordersPage, $ordersPerPage) : [],
             'orders_total' => $ordersTotal,
             'orders_page' => $ordersPage,
             'orders_last_page' => $ordersLastPage,

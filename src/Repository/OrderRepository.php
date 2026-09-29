@@ -234,6 +234,51 @@ final class OrderRepository
         return $totals;
     }
 
+    /**
+     * The figures of one customer's orders, in one query: how many orders the shop earned
+     * money from and how much, their first and last dates, the currencies they were placed
+     * in, and how many orders were left out (cancelled, refunded, still unpaid).
+     *
+     * The amounts are summed per order in a derived table first, like the dashboard
+     * revenue, because MariaDB resolves a correlated sub-query unexpectedly inside an
+     * aggregate.
+     *
+     * @return array{revenue_count: int, excluded_count: int, total: float, first_at: ?\DateTimeImmutable, last_at: ?\DateTimeImmutable, currency_count: int, currency_id: ?int}
+     */
+    public function findCustomerRevenueStats(int $customerId): array
+    {
+        $sql = 'SELECT
+                COALESCE(SUM(is_revenue), 0) AS revenue_count,
+                COUNT(*) - COALESCE(SUM(is_revenue), 0) AS excluded_count,
+                COALESCE(SUM(CASE WHEN is_revenue = 1 THEN computed ELSE 0 END), 0) AS total,
+                MIN(CASE WHEN is_revenue = 1 THEN created_at END) AS first_at,
+                MAX(CASE WHEN is_revenue = 1 THEN created_at END) AS last_at,
+                COUNT(DISTINCT CASE WHEN is_revenue = 1 THEN currency_id END) AS currency_count,
+                MIN(CASE WHEN is_revenue = 1 THEN currency_id END) AS currency_id
+            FROM (
+                SELECT '.OrderTableMap::COL_CREATED_AT.' AS created_at,
+                       '.OrderTableMap::COL_CURRENCY_ID.' AS currency_id,
+                       CASE WHEN '.OrderTableMap::COL_STATUS_ID.' IN ('.$this->statusIdListSql(self::REVENUE_STATUS_CODES).') THEN 1 ELSE 0 END AS is_revenue,
+                       '.OrderFilters::totalAmountSqlExpression().' AS computed
+                FROM `order`
+                WHERE '.OrderTableMap::COL_CUSTOMER_ID.' = :customer
+            ) AS per_order';
+
+        $statement = Propel::getConnection()->prepare($sql);
+        $statement->execute([':customer' => $customerId]);
+        $row = $statement->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'revenue_count' => (int) ($row['revenue_count'] ?? 0),
+            'excluded_count' => (int) ($row['excluded_count'] ?? 0),
+            'total' => (float) ($row['total'] ?? 0),
+            'first_at' => !empty($row['first_at']) ? new \DateTimeImmutable((string) $row['first_at']) : null,
+            'last_at' => !empty($row['last_at']) ? new \DateTimeImmutable((string) $row['last_at']) : null,
+            'currency_count' => (int) ($row['currency_count'] ?? 0),
+            'currency_id' => isset($row['currency_id']) ? (int) $row['currency_id'] : null,
+        ];
+    }
+
     public function countByCustomer(int $customerId): int
     {
         return (int) OrderQuery::create()->filterByCustomerId($customerId)->count();

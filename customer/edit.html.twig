@@ -36,6 +36,8 @@
             } only %}
         </div>
 
+        {% include '@BackOfficeDefaultTwig/customer/_kpi_band.html.twig' with { overview: overview } only %}
+
         {% form_theme form with bo_form_themes only %}
         {{ form_start(form, {
             action: path('admin.customer.update.process'),
@@ -311,7 +313,8 @@
             </div>
         {% endif %}
 
-        {# ── Recent orders ───────────────────────────────────────────────── #}
+        {# ── Recent orders, left out for an administrator who may not see them ── #}
+        {% if overview.canViewOrders %}
         {% set orders_rows = [] %}
         {% for order in recent_orders %}
             {% set orders_rows = orders_rows|merge([{
@@ -357,6 +360,7 @@
                 }) }}
             {% endif %}
         </div>
+        {% endif %}
     </div>
 
     {% if address_create_form is defined and is_granted('CREATE', 'admin.address') %}
