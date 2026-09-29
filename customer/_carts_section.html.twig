@@ -1,0 +1,73 @@
+{#
+    Body of the carts section of the customer sheet, served on its own by
+    admin.customer.carts when the section opens. Amounts exclude tax.
+#}
+<div data-testid="customer-carts">
+    <h3 class="h6 mb-2">{{ 'Cart in progress'|trans }}</h3>
+    {% if carts.current %}
+        {% set cart = carts.current %}
+        <p class="small text-muted mb-2" data-testid="customer-current-cart-meta">
+            {{ 'Last activity on %date'|trans({ '%date': cart.lastActivityAt|format_datetime('medium', 'short') }) }}
+            &middot; {{ 'Total excl. tax'|trans }} <strong data-testid="customer-current-cart-amount">{{ cart.amount|number_format(2, '.', ' ') }} {{ cart.currencySymbol }}</strong>
+        </p>
+        {% set line_rows = [] %}
+        {% for line in carts.currentLines %}
+            {% set title_html = line.productUrl
+                ? '<a href="' ~ line.productUrl|e ~ '" class="link-primary text-decoration-none" data-testid="customer-current-cart-product-link">' ~ line.title|e ~ '</a>'
+                : line.title|e %}
+            {% if line.isOffered %}
+                {% set title_html = title_html ~ ' <span class="badge text-bg-success-subtle text-success-emphasis">' ~ 'Offered'|trans|e ~ '</span>' %}
+            {% elseif line.isPromo %}
+                {% set title_html = title_html ~ ' <span class="badge text-bg-warning-subtle text-warning-emphasis">' ~ 'Promo'|trans|e ~ '</span>' %}
+            {% endif %}
+            {% set line_rows = line_rows|merge([{
+                title_html: title_html,
+                reference: line.reference,
+                quantity: line.quantity,
+                unit_price: line.unitPrice|number_format(2, '.', ' ') ~ ' ' ~ cart.currencySymbol,
+                line_total: line.lineTotal|number_format(2, '.', ' ') ~ ' ' ~ cart.currencySymbol,
+            }]) %}
+        {% endfor %}
+        {{ component('BoDataTable', {
+            id: 'customer-current-cart',
+            columns: [
+                column_html('title_html', 'Product'|trans),
+                column('reference', 'Reference'|trans, hideBelow: 'md'),
+                column('quantity', 'Quantity'|trans, 'end'),
+                column('unit_price', 'Unit price excl. tax'|trans, 'end', hideBelow: 'md'),
+                column('line_total', 'Total excl. tax'|trans, 'end'),
+            ],
+            rows: line_rows,
+            emptyMessage: 'This cart is empty.'|trans,
+        }) }}
+    {% else %}
+        <p class="text-muted mb-0" data-testid="customer-current-cart-empty">{{ 'No cart in progress.'|trans }}</p>
+    {% endif %}
+
+    <h3 class="h6 mt-4 mb-2">{{ 'Abandoned carts'|trans }}</h3>
+    {% set abandoned_rows = [] %}
+    {% for cart in carts.abandoned %}
+        {% set abandoned_rows = abandoned_rows|merge([{
+            last_activity: cart.lastActivityAt|format_datetime('medium', 'short'),
+            created_at: cart.createdAt|format_date('medium'),
+            lines: cart.lineCount,
+            amount: cart.amount|number_format(2, '.', ' ') ~ ' ' ~ cart.currencySymbol,
+        }]) %}
+    {% endfor %}
+    {{ component('BoDataTable', {
+        id: 'customer-abandoned-carts',
+        columns: [
+            column('last_activity', 'Last activity'|trans),
+            column('created_at', 'Created on'|trans, hideBelow: 'md'),
+            column('lines', 'Lines'|trans, 'end'),
+            column('amount', 'Total excl. tax'|trans, 'end'),
+        ],
+        rows: abandoned_rows,
+        emptyMessage: 'No abandoned cart in the last %days% days.'|trans({ '%days%': carts.horizonDays }),
+    }) }}
+
+    <p class="small text-muted mt-2 mb-0" data-testid="customer-carts-horizon">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        {{ 'The shop maintenance deletes the carts without order after %days% days: older carts cannot be shown.'|trans({ '%days%': carts.horizonDays }) }}
+    </p>
+</div>
