@@ -4,8 +4,8 @@
 #}
 {% macro tile(label, value, icon, accent, testid, hint = null, note = null) %}
     <div class="col-6 col-md-4 col-xxl-2">
-        <div class="card h-100 shadow-sm border-0" data-testid="{{ testid }}">
-            <div class="card-body py-3">
+        <div class="h-100 border rounded-3 bg-body" data-testid="{{ testid }}">
+            <div class="p-3">
                 <div class="d-flex align-items-center gap-2 text-muted small">
                     <span class="rounded-circle bg-{{ accent }}-subtle text-{{ accent }} d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width:28px;height:28px;">
                         <i class="bi {{ icon }}" aria-hidden="true"></i>
@@ -25,7 +25,7 @@
 {% set kpis = overview.kpis %}
 {% set definition = 'Counted on the paid, processing and sent orders, like the dashboard revenue. Cancelled, refunded and unpaid orders are left out.'|trans %}
 
-<div class="row g-3 mb-3" data-testid="customer-kpis">
+<div class="row g-3" data-testid="customer-kpis">
     {% if kpis is not null %}
         {% set money = kpis.currencySymbol %}
         {{ _self.tile(

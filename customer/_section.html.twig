@@ -1,0 +1,38 @@
+{#
+    A collapsible section of the customer sheet, used with {% embed %}.
+
+    id        unique within the page, builds the element ids
+    title     heading of the section
+    icon      Bootstrap icon class
+    testid    data-testid of the section
+    open      rendered open (default true)
+    count     optional badge next to the title
+    lazy_url  when set, the body is fetched from this URL the first time the section opens,
+              and the section_body block is only a placeholder
+#}
+{% set body_id = 'customer-section-' ~ id ~ '-body' %}
+{% set is_open = open ?? true %}
+{% set lazy = lazy_url ?? null %}
+{% set badge = count ?? null %}
+<section class="mb-4" data-testid="{{ testid }}"
+    {%- if lazy %} data-controller="bo-lazy-collapse" data-bo-lazy-collapse-url-value="{{ lazy }}" data-bo-lazy-collapse-error-message-value="{{ 'Unable to load this section.'|trans }}"{% endif %}>
+    <h2 class="h5 mb-0 border-bottom">
+        <button type="button"
+                class="btn btn-link w-100 px-0 py-2 d-flex align-items-center gap-2 text-start bo-section-toggle{{ is_open ? '' : ' collapsed' }}"
+                data-bs-toggle="collapse" data-bs-target="#{{ body_id }}"
+                aria-expanded="{{ is_open ? 'true' : 'false' }}" aria-controls="{{ body_id }}"
+                data-testid="{{ testid }}-toggle">
+            <i class="bi {{ icon }}" aria-hidden="true"></i>
+            <span>{{ title }}</span>
+            {% if badge is not null %}
+                <span class="badge rounded-pill text-bg-light border" data-testid="{{ testid }}-count">{{ badge }}</span>
+            {% endif %}
+            <i class="bi bi-chevron-down ms-auto bo-section-toggle__chevron" aria-hidden="true"></i>
+        </button>
+    </h2>
+    <div id="{{ body_id }}" class="collapse{{ is_open ? ' show' : '' }}">
+        <div class="pt-3"{% if lazy %} data-bo-lazy-collapse-target="body"{% endif %}>
+            {% block section_body %}{% endblock %}
+        </div>
+    </div>
+</section>

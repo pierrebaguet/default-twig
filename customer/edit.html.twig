@@ -27,16 +27,27 @@
                     </span>
                 {% endif %}
             </h1>
-            {% include '@BackOfficeDefaultTwig/_prev_next_buttons.html.twig' with {
-                prev_url: prev_url|default(null),
-                next_url: next_url|default(null),
-                prev_label: 'Edit previous customer'|trans,
-                next_label: 'Edit next customer'|trans,
-                testid: 'customer',
-            } only %}
+            <div class="d-flex flex-wrap align-items-center gap-2" data-testid="customer-edit-actions">
+                {# A module opening an order for the customer puts its button here. #}
+                {{ safe_hook('customer-edit.actions', { customer_id: customer.id, location: 'customer-edit-actions' }) }}
+                {% include '@BackOfficeDefaultTwig/_prev_next_buttons.html.twig' with {
+                    prev_url: prev_url|default(null),
+                    next_url: next_url|default(null),
+                    prev_label: 'Edit previous customer'|trans,
+                    next_label: 'Edit next customer'|trans,
+                    testid: 'customer',
+                } only %}
+            </div>
         </div>
 
-        {% include '@BackOfficeDefaultTwig/customer/_kpi_band.html.twig' with { overview: overview } only %}
+        {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+            id: 'overview', title: 'Overview'|trans, icon: 'bi-speedometer2', testid: 'customer-section-overview',
+            overview: overview,
+        } only %}
+            {% block section_body %}
+                {% include '@BackOfficeDefaultTwig/customer/_kpi_band.html.twig' with { overview: overview } only %}
+            {% endblock %}
+        {% endembed %}
 
         {% form_theme form with bo_form_themes only %}
         {{ form_start(form, {
@@ -290,28 +301,31 @@
             }]) %}
         {% endfor %}
 
-        <div class="mt-4" data-testid="customer-addresses-section">
-            {{ component('BoDataTable', {
-                id: 'customer-addresses',
-                caption: 'Addresses'|trans ~ ' (' ~ addresses|length ~ ')',
-                columns: [
-                    column_html('label_html', 'Label'|trans),
-                    column('name', 'Name'|trans),
-                    column('address', 'Address'|trans, hideBelow: 'lg'),
-                    column_actions(),
-                ],
-                rows: addresses_rows,
-                emptyMessage: 'No address registered for this customer.'|trans,
-            }) }}
-        </div>
-
-        {% if is_granted('CREATE', 'admin.address') %}
-            <div class="d-flex justify-content-end mt-2">
-                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#customer-address-create-modal" data-testid="customer-address-create-button">
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Add a new address'|trans }}
-                </button>
-            </div>
-        {% endif %}
+        {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+            id: 'addresses', title: 'Addresses'|trans, icon: 'bi-geo-alt', testid: 'customer-addresses-section',
+            count: addresses|length, addresses_rows: addresses_rows,
+        } only %}
+            {% block section_body %}
+                {{ component('BoDataTable', {
+                    id: 'customer-addresses',
+                    columns: [
+                        column_html('label_html', 'Label'|trans),
+                        column('name', 'Name'|trans),
+                        column('address', 'Address'|trans, hideBelow: 'lg'),
+                        column_actions(),
+                    ],
+                    rows: addresses_rows,
+                    emptyMessage: 'No address registered for this customer.'|trans,
+                }) }}
+                {% if is_granted('CREATE', 'admin.address') %}
+                    <div class="d-flex justify-content-end mt-2">
+                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#customer-address-create-modal" data-testid="customer-address-create-button">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Add a new address'|trans }}
+                        </button>
+                    </div>
+                {% endif %}
+            {% endblock %}
+        {% endembed %}
 
         {# ── Recent orders, left out for an administrator who may not see them ── #}
         {% if overview.canViewOrders %}
@@ -329,37 +343,96 @@
             }]) %}
         {% endfor %}
 
-        <div class="mt-4" data-testid="customer-orders-section">
-            {{ component('BoDataTable', {
-                id: 'customer-orders',
-                caption: ('Orders for this customer'|trans) ~ ' (' ~ orders_total|default(0) ~ ')',
-                columns: [
-                    column_html('ref_html', 'Reference'|trans),
-                    column('created_at', 'Date'|trans, hideBelow: 'lg'),
-                    column_html('status_html', 'Status'|trans),
-                    column('total', 'Total'|trans, 'end'),
-                    column_actions(),
-                ],
-                rows: orders_rows,
-                emptyMessage: 'This customer has not placed any order yet.'|trans,
-                extraColumnsHeaderHook: 'customer.orders-table-header',
-                extraColumnsHook: 'customer.orders-table-row',
-                headerHookContext: { customer_id: customer.id, location: 'orders_table_header' },
-                rowHookContext: { customer_id: customer.id, location: 'orders_table_row' },
-                rowHookArgs: { order_id: 'id' },
-            }) }}
-            {% if orders_last_page|default(1) > 1 %}
-                {{ component('BoPagination', {
-                    route: 'admin.customer.update.view',
-                    currentPage: orders_page,
-                    lastPage: orders_last_page,
-                    routeParams: { customer_id: customer.id },
-                    pageParam: 'orders_page',
-                    ariaLabel: 'Customer orders pagination'|trans,
-                    testid: 'customer-orders',
+        {# Rendered open: the pagination reloads the page, an open state would be lost. #}
+        {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+            id: 'orders', title: 'Orders'|trans, icon: 'bi-bag', testid: 'customer-orders-section',
+            count: orders_total|default(0), orders_rows: orders_rows, customer: customer,
+            orders_page: orders_page, orders_last_page: orders_last_page|default(1),
+        } only %}
+            {% block section_body %}
+                {{ component('BoDataTable', {
+                    id: 'customer-orders',
+                    columns: [
+                        column_html('ref_html', 'Reference'|trans),
+                        column('created_at', 'Date'|trans, hideBelow: 'lg'),
+                        column_html('status_html', 'Status'|trans),
+                        column('total', 'Total'|trans, 'end'),
+                        column_actions(),
+                    ],
+                    rows: orders_rows,
+                    emptyMessage: 'This customer has not placed any order yet.'|trans,
+                    extraColumnsHeaderHook: 'customer.orders-table-header',
+                    extraColumnsHook: 'customer.orders-table-row',
+                    headerHookContext: { customer_id: customer.id, location: 'orders_table_header' },
+                    rowHookContext: { customer_id: customer.id, location: 'orders_table_row' },
+                    rowHookArgs: { order_id: 'id' },
                 }) }}
-            {% endif %}
-        </div>
+                {% if orders_last_page > 1 %}
+                    {{ component('BoPagination', {
+                        route: 'admin.customer.update.view',
+                        currentPage: orders_page,
+                        lastPage: orders_last_page,
+                        routeParams: { customer_id: customer.id },
+                        pageParam: 'orders_page',
+                        ariaLabel: 'Customer orders pagination'|trans,
+                        testid: 'customer-orders',
+                    }) }}
+                {% endif %}
+            {% endblock %}
+        {% endembed %}
+        {% endif %}
+
+        {# ── Carts, loaded when the section opens ────────────────────────── #}
+        {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+            id: 'carts', title: 'Carts'|trans, icon: 'bi-cart3', testid: 'customer-carts-section',
+            open: false, lazy_url: path('admin.customer.carts', { customer_id: customer.id }),
+        } only %}
+            {% block section_body %}
+                <p class="text-muted small mb-0">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>{{ 'Loading…'|trans }}
+                </p>
+            {% endblock %}
+        {% endembed %}
+
+        {#
+            ── Sections brought by modules ──────────────────────────────────
+            A module adds a section by answering the `customer.tab` hook block with
+            { id, title, content } or { id, title, href }: with an href, the section loads
+            its body from that URL when it opens. A module answering `customer.tab-content`
+            gets a card of its own in the Modules section. No module, no section.
+        #}
+        {% set module_sections = hook_block('customer.tab', { customer: customer.id, customer_id: customer.id, id: customer.id }) %}
+        {% for block in module_sections %}
+            {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+                id: 'module-' ~ block.id|default(loop.index),
+                title: block.title|default(''),
+                icon: 'bi-puzzle',
+                testid: 'customer-module-section-' ~ block.id|default(loop.index),
+                open: not (block.href is defined and block.href),
+                lazy_url: block.href is defined and block.href ? block.href : null,
+                block_content: block.content is defined ? block.content : '',
+            } only %}
+                {% block section_body %}
+                    {% if lazy_url %}
+                        <p class="text-muted small mb-0">
+                            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>{{ 'Loading…'|trans }}
+                        </p>
+                    {% else %}
+                        {{ block_content|raw }}
+                    {% endif %}
+                {% endblock %}
+            {% endembed %}
+        {% endfor %}
+
+        {% if has_hook('customer.tab-content') %}
+            {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+                id: 'modules', title: 'Modules'|trans, icon: 'bi-puzzle', testid: 'customer-modules-section',
+                customer: customer,
+            } only %}
+                {% block section_body %}
+                    {{ hook_cards('customer.tab-content', { customer: customer.id, customer_id: customer.id, id: customer.id, location: 'customer-tab-content', view: 'customer' }) }}
+                {% endblock %}
+            {% endembed %}
         {% endif %}
     </div>
 

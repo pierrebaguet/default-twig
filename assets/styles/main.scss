@@ -1881,6 +1881,28 @@ tr.bo-order-row--urgent {
     transition: transform 0.15s ease;
 }
 
+// Collapsible section of a sheet (customer sheet): the heading is the toggle, and the
+// chevron points up once the section is open, like .bo-customer-filters__toggle.
+.bo-section-toggle {
+    color: var(--bs-body-color);
+    font-weight: 500;
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--bs-primary);
+    }
+
+    &[aria-expanded="true"] .bo-section-toggle__chevron {
+        transform: rotate(180deg);
+    }
+}
+
+.bo-section-toggle__chevron {
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
 .bo-customer-filters__pill {
     display: inline-flex;
     align-items: center;

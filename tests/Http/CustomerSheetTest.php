@@ -16,8 +16,11 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Event\Hook\HookRenderBlockEvent;
+use Thelia\Core\Event\Hook\HookRenderEvent;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Core\Template\TemplateDefinition;
 use Thelia\Model\Admin;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Customer;
@@ -36,6 +39,9 @@ final class CustomerSheetTest extends WebIntegrationTestCase
     private AdminSessionInjector $injector;
 
     private FixtureFactory $factory;
+
+    /** @var list<array{0: string, 1: callable}> */
+    private array $listeners = [];
 
     protected function setUp(): void
     {
@@ -56,6 +62,10 @@ final class CustomerSheetTest extends WebIntegrationTestCase
     {
         if (isset($this->injector)) {
             $this->injector->clear();
+        }
+
+        foreach ($this->listeners as [$eventName, $listener]) {
+            $this->getService(EventDispatcherInterface::class)->removeListener($eventName, $listener);
         }
 
         ConfigQuery::resetCache();
@@ -167,6 +177,72 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         $this->client->request('GET', '/admin/customer/carts?customer_id=987654321');
 
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
+    }
+
+    public function testEverySectionIsThereAndTheCartsWaitToBeOpened(): void
+    {
+        $crawler = $this->sheet($this->customer(), $this->factory->admin());
+
+        foreach (['customer-section-overview', 'customer-addresses-section', 'customer-orders-section', 'customer-carts-section'] as $testid) {
+            self::assertCount(1, $crawler->filter('[data-testid="'.$testid.'"]'), $testid.' is on the sheet.');
+            self::assertCount(1, $crawler->filter('[data-testid="'.$testid.'-toggle"][data-bs-toggle="collapse"]'), $testid.' folds.');
+        }
+
+        $carts = $crawler->filter('[data-testid="customer-carts-section"]');
+        self::assertStringContainsString('/admin/customer/carts?customer_id=', (string) $carts->attr('data-bo-lazy-collapse-url-value'));
+        self::assertSame('false', $carts->filter('[data-testid="customer-carts-section-toggle"]')->attr('aria-expanded'), 'The carts are only read once the section is opened.');
+        self::assertCount(0, $crawler->filter('[data-testid="customer-carts"]'), 'Their content is not in the page.');
+        self::assertSame('true', $crawler->filter('[data-testid="customer-orders-section-toggle"]')->attr('aria-expanded'));
+    }
+
+    public function testWithoutModuleTheSheetShowsNoModuleSection(): void
+    {
+        $crawler = $this->sheet($this->customer(), $this->factory->admin());
+
+        self::assertCount(0, $crawler->filter('[data-testid^="customer-module-section-"]'));
+        self::assertCount(0, $crawler->filter('[data-testid="customer-modules-section"]'));
+    }
+
+    public function testASectionBroughtByAModuleIsShownAndAFailingOneIsLeftOut(): void
+    {
+        $customer = $this->customer();
+        $this->listen('hook.'.TemplateDefinition::BACK_OFFICE.'.customer.tab', static function (): void {
+            throw new \RuntimeException('A module section that breaks.');
+        });
+        $this->listen('hook.'.TemplateDefinition::BACK_OFFICE.'.customer.tab', static function (HookRenderBlockEvent $event): void {
+            $event->add(['id' => 'notes', 'title' => 'Internal notes <b>', 'content' => '<p data-testid="module-notes-body">Called on Monday for customer '.$event->getArgument('customer_id').'</p>']);
+        });
+        $this->listen('hook.'.TemplateDefinition::BACK_OFFICE.'.customer.tab', static function (HookRenderBlockEvent $event): void {
+            $event->add(['id' => 'tickets', 'title' => 'Support tickets', 'href' => '/admin/module/tickets?customer_id='.$event->getArgument('customer_id')]);
+        });
+
+        $crawler = $this->sheet($customer, $this->factory->admin());
+
+        $notes = $crawler->filter('[data-testid="customer-module-section-notes"]');
+        self::assertCount(1, $notes, 'The section of the module that works is shown.');
+        self::assertSame('Called on Monday for customer '.$customer->getId(), trim($notes->filter('[data-testid="module-notes-body"]')->text()));
+        self::assertStringContainsString('Internal notes <b>', $notes->filter('[data-testid="customer-module-section-notes-toggle"]')->text(), 'The title a module gives is escaped.');
+
+        $tickets = $crawler->filter('[data-testid="customer-module-section-tickets"]');
+        self::assertSame('/admin/module/tickets?customer_id='.$customer->getId(), $tickets->attr('data-bo-lazy-collapse-url-value'), 'A module section with an href loads when it opens.');
+        self::assertCount(1, $crawler->filter('[data-testid="customer-orders-section"]'), 'The failing module did not take the sheet down.');
+    }
+
+    public function testAModuleAnsweringTheContentHookGetsItsCardInTheModulesSection(): void
+    {
+        $this->listen('hook.'.TemplateDefinition::BACK_OFFICE.'.customer.tab-content', static function (HookRenderEvent $event): void {
+            $event->add('<p data-testid="module-card-body">Loyalty points: 120</p>');
+        });
+
+        $crawler = $this->sheet($this->customer(), $this->factory->admin());
+
+        self::assertCount(1, $crawler->filter('[data-testid="customer-modules-section"] [data-testid="module-card-body"]'));
+    }
+
+    private function listen(string $eventName, callable $listener): void
+    {
+        $this->getService(EventDispatcherInterface::class)->addListener($eventName, $listener);
+        $this->listeners[] = [$eventName, $listener];
     }
 
     private function customer(): Customer

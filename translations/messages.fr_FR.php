@@ -2133,4 +2133,7 @@ return [
     'No abandoned cart in the last %days% days.' => 'Aucun panier abandonné sur les %days% derniers jours.',
     'The shop maintenance deletes the carts without order after %days% days: older carts cannot be shown.' => 'La maintenance de la boutique supprime les paniers sans commande après %days% jours : les paniers plus anciens ne peuvent pas être affichés.',
     'This customer does not exist.' => 'Ce client n\'existe pas.',
+    'Overview' => 'Vue d\'ensemble',
+    'Carts' => 'Paniers',
+    'Unable to load this section.' => 'Impossible de charger cette section.',
 ];
