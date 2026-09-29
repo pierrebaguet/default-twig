@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Service;
 
 use BackOfficeDefaultTwigBundle\Repository\CustomerRepository;
+use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerChoiceProvider;
 use Thelia\Core\Security\Resource\AdminResources;
@@ -80,7 +81,7 @@ final class CustomerChoiceProviderTest extends IntegrationTestCase
         $access = $this->createMock(AdminAccessChecker::class);
         $access->method('canView')->with(AdminResources::CUSTOMER)->willReturn($granted);
 
-        return new CustomerChoiceProvider(new CustomerRepository(), $access);
+        return new CustomerChoiceProvider(new CustomerRepository(new OrderRepository()), $access);
     }
 
     private function customer(): Customer

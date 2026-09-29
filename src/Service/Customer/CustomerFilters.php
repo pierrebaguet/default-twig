@@ -279,7 +279,38 @@ final readonly class CustomerFilters
         return $this->cloneWith($overrides);
     }
 
-    public function applyTo(CustomerQuery $query): CustomerQuery
+    /**
+     * The money a customer spent, as a SQL expression correlated on $customerIdColumn. Only
+     * the orders in a revenue status count, so that the list column, its sort, its range
+     * filter and the dashboard revenue add up the same orders.
+     *
+     * A flat correlated sub-query on purpose: nesting a derived table around it shadows the
+     * outer customer id, and MariaDB answers "Unknown column".
+     *
+     * @param list<int> $revenueStatusIds
+     */
+    public static function totalSpentSqlExpression(string $customerIdColumn, array $revenueStatusIds): string
+    {
+        return '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression().'), 0) FROM `order`'
+            .' WHERE `order`.customer_id = '.$customerIdColumn
+            .' AND `order`.status_id IN ('.self::statusIdListSql($revenueStatusIds).'))';
+    }
+
+    /**
+     * Status ids as a SQL list. Every value is an integer by signature; an empty list
+     * becomes `0`, which no primary key matches.
+     *
+     * @param list<int> $statusIds
+     */
+    public static function statusIdListSql(array $statusIds): string
+    {
+        return $statusIds === [] ? '0' : implode(', ', array_map(static fn (int $id): string => (string) $id, $statusIds));
+    }
+
+    /**
+     * @param list<int> $revenueStatusIds the statuses the "total spent" range counts, see {@see totalSpentSqlExpression()}
+     */
+    public function applyTo(CustomerQuery $query, array $revenueStatusIds): CustomerQuery
     {
         if ($this->createdFrom !== null) {
             $query->filterByCreatedAt($this->createdFrom->format('Y-m-d H:i:s'), Criteria::GREATER_EQUAL);
@@ -300,7 +331,7 @@ final readonly class CustomerFilters
         $this->applyCountry($query);
         $this->applyPhone($query);
         $this->applyTags($query);
-        $this->applyTotalSpentRange($query);
+        $this->applyTotalSpentRange($query, $revenueStatusIds);
         $this->applyOrderCountRange($query);
         $this->applySearch($query);
 
@@ -406,16 +437,16 @@ final readonly class CustomerFilters
         );
     }
 
-    private function applyTotalSpentRange(CustomerQuery $query): void
+    /**
+     * @param list<int> $revenueStatusIds
+     */
+    private function applyTotalSpentRange(CustomerQuery $query, array $revenueStatusIds): void
     {
         if ($this->minTotalSpent === null && $this->maxTotalSpent === null) {
             return;
         }
 
-        // Flat correlated sub-query: nesting another derived table around it
-        // shadows the outer customer.id and triggers "Unknown column" on MariaDB.
-        $expression = '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression()
-            .'), 0) FROM `order` WHERE `order`.customer_id = '.CustomerTableMap::COL_ID.')';
+        $expression = self::totalSpentSqlExpression(CustomerTableMap::COL_ID, $revenueStatusIds);
 
         if ($this->minTotalSpent !== null) {
             $query->where($expression.' >= ?', $this->minTotalSpent, \PDO::PARAM_STR);

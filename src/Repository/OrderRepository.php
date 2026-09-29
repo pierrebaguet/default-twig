@@ -528,6 +528,19 @@ final class OrderRepository
     }
 
     /**
+     * The statuses an order counts as revenue in: paid, processing, sent, and any status of
+     * the shop's own that answers for one of them. Exposed so that every figure calling
+     * itself revenue or money spent (the dashboard, the customer list, the customer sheet)
+     * adds up the same orders.
+     *
+     * @return list<int>
+     */
+    public function revenueStatusIds(): array
+    {
+        return $this->statusIdsAnsweringFor(self::REVENUE_STATUS_CODES);
+    }
+
+    /**
      * The statuses an order still waiting for its payment sits in. Exposed so that the
      * dashboard alert and the order list it links to select the same orders.
      *

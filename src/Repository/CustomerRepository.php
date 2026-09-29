@@ -47,6 +47,11 @@ final readonly class CustomerRepository
         'order_count' => 'order_count_sort',
     ];
 
+    public function __construct(
+        private OrderRepository $orders,
+    ) {
+    }
+
     public function countAll(): int
     {
         return (int) CustomerQuery::create()->count();
@@ -65,18 +70,21 @@ final readonly class CustomerRepository
      */
     public function findPaginated(CustomerFilters $filters, int $page, int $perPage): array
     {
-        $countQuery = $this->buildFilteredQuery($filters);
+        // Read once for the three queries below: the status list is deliberately not memoised.
+        $revenueStatusIds = $this->orders->revenueStatusIds();
+
+        $countQuery = $this->buildFilteredQuery($filters, $revenueStatusIds);
         $total = (int) $countQuery->count();
         $lastPage = max(1, (int) ceil($total / max(1, $perPage)));
         $page = max(1, min($page, $lastPage));
 
-        $rowsQuery = $this->buildFilteredQuery($filters);
+        $rowsQuery = $this->buildFilteredQuery($filters, $revenueStatusIds);
         $direction = $filters->direction === 'asc' ? Criteria::ASC : Criteria::DESC;
 
         if (\array_key_exists($filters->sort, self::COMPUTED_SORT_FIELDS)) {
             $alias = self::COMPUTED_SORT_FIELDS[$filters->sort];
             $expression = $filters->sort === 'total_spent'
-                ? self::totalSpentSubquery()
+                ? CustomerFilters::totalSpentSqlExpression('customer.id', $revenueStatusIds)
                 : self::orderCountSubquery();
             $rowsQuery->withColumn($expression, $alias);
             $rowsQuery->orderBy($alias, $direction);
@@ -95,8 +103,9 @@ final readonly class CustomerRepository
     }
 
     /**
-     * Total spent per customer for a given list of customer IDs. Returns a map
-     * indexed by customer_id so the row presenter can hit it in O(1).
+     * Total spent per customer for a given list of customer IDs, on the revenue statuses
+     * only (see {@see CustomerFilters::totalSpentSqlExpression()}). Returns a map indexed
+     * by customer_id so the row presenter can hit it in O(1).
      *
      * @param list<int> $customerIds
      *
@@ -114,6 +123,7 @@ final readonly class CustomerRepository
                 SELECT customer_id, '.OrderFilters::totalAmountSqlExpression().' AS computed
                 FROM `order`
                 WHERE customer_id IN ('.$placeholders.')
+                  AND status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
             ) AS sub
             GROUP BY customer_id';
 
@@ -323,6 +333,7 @@ final readonly class CustomerRepository
             FROM (
                 SELECT customer_id, '.OrderFilters::totalAmountSqlExpression().' AS computed
                 FROM `order`
+                WHERE status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
             ) AS per_order
             GROUP BY customer_id
         ) AS sub';
@@ -392,21 +403,15 @@ final readonly class CustomerRepository
         return $items;
     }
 
-    private function buildFilteredQuery(CustomerFilters $filters): CustomerQuery
+    /**
+     * @param list<int> $revenueStatusIds
+     */
+    private function buildFilteredQuery(CustomerFilters $filters, array $revenueStatusIds): CustomerQuery
     {
         $query = CustomerQuery::create();
-        $filters->applyTo($query);
+        $filters->applyTo($query, $revenueStatusIds);
 
         return $query;
-    }
-
-    private static function totalSpentSubquery(): string
-    {
-        // Flat correlated sub-query so MariaDB resolves customer.id at the
-        // outer scope. A nested derived table would shadow it and trigger
-        // "Unknown column 'customer.id' in WHERE".
-        return '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression()
-            .'), 0) FROM `order` WHERE `order`.customer_id = customer.id)';
     }
 
     private static function orderCountSubquery(): string
