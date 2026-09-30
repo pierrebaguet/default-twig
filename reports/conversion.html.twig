@@ -48,7 +48,7 @@
 
         <p class="text-muted small mb-3" data-testid="report-funnel-scope">
             <i class="bi bi-info-circle" aria-hidden="true"></i>
-            {{ 'This funnel is rebuilt from the carts and the orders of the period. It does not count page views: use a web analytics tool for the visit funnel.'|trans }}
+            {{ 'This funnel is rebuilt from the carts and the orders of the period. It does not count page views: for the visit funnel, plug in a web analytics tool, for instance with the GoogleTagManager module.'|trans }}
         </p>
 
         <div class="bo-tab-bar">
@@ -149,6 +149,13 @@
                         </table>
                     </div>
                 </div>
+
+                {% if report.ordersOutnumberCheckoutChoices %}
+                    <p class="text-muted small mt-2 mb-0" data-testid="report-choices-notice">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        {{ 'More orders than carts holding a delivery or a payment module: the checkout clears these two choices when the shopper goes back to the cart page, so these steps only count the carts that still hold them.'|trans }}
+                    </p>
+                {% endif %}
             </div>
 
             {% if report.searchLog is not null %}

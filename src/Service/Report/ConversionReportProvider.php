@@ -25,6 +25,7 @@ use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Core\Security\SecurityContext;
 use Thelia\Domain\Cart\Service\CartPurgeHorizon;
+use Thelia\Domain\Report\ConversionFunnel\ConversionFunnel;
 use Thelia\Domain\Report\ConversionFunnel\ConversionFunnelCalculator;
 use Thelia\Domain\Report\ConversionFunnel\FunnelStep;
 use Thelia\Model\Export;
@@ -109,9 +110,19 @@ final readonly class ConversionReportProvider
             ),
             range: $range,
             coverage: $coverage,
+            ordersOutnumberCheckoutChoices: self::ordersOutnumberCheckoutChoices($funnel),
             searchLog: $searchLog,
             exportUrl: $this->exportUrl(),
         );
+    }
+
+    /**
+     * The checkout clears the delivery and payment modules on a return to the cart
+     * page: a period can hold more orders than carts still carrying the choice.
+     */
+    public static function ordersOutnumberCheckoutChoices(ConversionFunnel $funnel): bool
+    {
+        return $funnel->step(FunnelStep::ORDERS_CREATED)->count > $funnel->step(FunnelStep::CARTS_WITH_PAYMENT)->count;
     }
 
     private function stepHint(string $key, string $locale): ?string

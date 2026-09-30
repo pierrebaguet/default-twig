@@ -29,6 +29,7 @@ final readonly class ConversionReport
         public array $periodOptions,
         public DateRange $range,
         public FunnelCoverage $coverage,
+        public bool $ordersOutnumberCheckoutChoices,
         public ?SearchLogReport $searchLog,
         public ?string $exportUrl,
     ) {
