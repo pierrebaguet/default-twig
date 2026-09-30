@@ -22,7 +22,9 @@ use Propel\Runtime\Propel;
  * The database has no "abandoned" flag: a cart became an order when an order points to it
  * (`order.cart_id`, a column with no foreign key), and a cart line is what makes a cart
  * worth showing. The amounts are the lines' own prices, excluding tax, as the cart stores
- * them: the taxed figure depends on a delivery country the cart may not have.
+ * them: the taxed figure depends on a delivery country the cart may not have. A line a
+ * promotion offered is free and left out of the amounts, as the core cart total leaves it
+ * out (BaseFacade::getCartTotalPrice()).
  */
 final readonly class CustomerCartRepository
 {
@@ -39,7 +41,7 @@ final readonly class CustomerCartRepository
                 GREATEST(COALESCE(c.updated_at, c.created_at), MAX(ci.updated_at)) AS last_activity_at,
                 COUNT(ci.id) AS line_count,
                 SUM(ci.quantity) AS quantity,
-                SUM(ci.quantity * CASE WHEN ci.promo = 1 THEN ci.promo_price ELSE ci.price END) AS amount
+                SUM(CASE WHEN ci.is_offered = 1 THEN 0 ELSE ci.quantity * CASE WHEN ci.promo = 1 THEN ci.promo_price ELSE ci.price END END) AS amount
             FROM cart c
             JOIN cart_item ci ON ci.cart_id = c.id
             WHERE c.customer_id = :customer
@@ -101,7 +103,7 @@ final readonly class CustomerCartRepository
                 'reference' => $reference,
                 'quantity' => $quantity,
                 'unit_price' => round($unitPrice, 2),
-                'line_total' => round($unitPrice * $quantity, 2),
+                'line_total' => (int) $row['is_offered'] === 1 ? 0.0 : round($unitPrice * $quantity, 2),
                 'is_promo' => $isPromo,
                 'is_offered' => (int) $row['is_offered'] === 1,
             ];

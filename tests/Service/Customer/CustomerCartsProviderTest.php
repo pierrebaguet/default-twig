@@ -92,6 +92,32 @@ final class CustomerCartsProviderTest extends IntegrationTestCase
         self::assertSame([], $carts->abandoned);
     }
 
+    /**
+     * A line a promotion offered is free: the core leaves it out of the cart total
+     * (BaseFacade::getCartTotalPrice()), and so does the sheet. The line stays listed.
+     */
+    public function testAnOfferedLineIsNotAddedToTheAmountOfTheCart(): void
+    {
+        $customer = $this->customer();
+        $cart = $this->factory->cart($customer);
+        $this->factory->cartItem($cart, $this->product, null, ['quantity' => 1.0, 'price' => '10.000000']);
+        $this->factory->cartItem($cart, $this->product, null, ['quantity' => 1.0, 'price' => '50.000000', 'isOffered' => 1]);
+        $old = $this->factory->cart($customer);
+        $this->factory->cartItem($old, $this->product, null, ['quantity' => 1.0, 'price' => '20.000000']);
+        $this->factory->cartItem($old, $this->product, null, ['quantity' => 2.0, 'price' => '30.000000', 'isOffered' => 1]);
+        $this->age($old, '-5 days');
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertNotNull($carts->current);
+        self::assertEqualsWithDelta(10.0, $carts->current->amount, 0.001, 'The offered line is free: the cart is worth 10, not 60.');
+        self::assertCount(2, $carts->currentLines, 'The offered line is still listed.');
+        self::assertTrue($carts->currentLines[1]->isOffered);
+        self::assertSame(0.0, $carts->currentLines[1]->lineTotal);
+        self::assertCount(1, $carts->abandoned);
+        self::assertEqualsWithDelta(20.0, $carts->abandoned[0]->amount, 0.001, 'An abandoned cart leaves its offered lines out too.');
+    }
+
     public function testACartLeftThreeWeeksAgoIsAbandonedAndDated(): void
     {
         $customer = $this->customer();
