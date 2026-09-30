@@ -250,6 +250,23 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         self::assertCount(1, $crawler->filter('[data-testid="customer-modules-section"] [data-testid="module-card-body"]'));
     }
 
+    public function testAModuleCanPutAButtonNextToTheSheetNavigation(): void
+    {
+        $customer = $this->customer();
+
+        $crawler = $this->sheet($customer, $this->factory->admin());
+        self::assertCount(0, $crawler->filter('[data-testid="customer-edit-actions"] [data-testid="module-create-order"]'), 'No module, no button.');
+
+        $this->listen('hook.'.TemplateDefinition::BACK_OFFICE.'.customer-edit.actions', static function (HookRenderEvent $event): void {
+            $event->add('<a class="btn btn-sm btn-primary" data-testid="module-create-order" href="/admin/module/orders/new?customer_id='.(int) $event->getArgument('customer_id').'">Create an order</a>');
+        });
+
+        $crawler = $this->sheet($customer, $this->factory->admin());
+        $button = $crawler->filter('[data-testid="customer-edit-actions"] [data-testid="module-create-order"]');
+        self::assertCount(1, $button, 'The button a module adds sits in the actions of the sheet.');
+        self::assertSame('/admin/module/orders/new?customer_id='.$customer->getId(), $button->attr('href'), 'The hook hands the module the customer id.');
+    }
+
     public function testAPasswordResetLinkIsSentAndLeavesATraceInTheAdminLog(): void
     {
         $customer = $this->customer();

@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Service\Customer;
 
+use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerOverviewProvider;
@@ -63,6 +64,38 @@ final class CustomerOverviewProviderTest extends IntegrationTestCase
         self::assertSame('2026-01-10', $kpis->firstOrderAt?->format('Y-m-d'));
         self::assertSame('2026-04-01', $kpis->lastOrderAt?->format('Y-m-d'), 'The cancelled order is not the last order the customer paid for.');
         self::assertFalse($kpis->mixesCurrencies);
+    }
+
+    /**
+     * The sheet and the dashboard must not hold two definitions of revenue: over a period
+     * where this customer is the only one to order, the total spent the sheet shows is the
+     * revenue the dashboard reads, whatever mix of statuses the orders sit in.
+     */
+    public function testTheTotalSpentReadsTheSameOrdersAsTheDashboardRevenue(): void
+    {
+        $customer = $this->customer();
+        $ownSent = $this->factory->orderStatus(['equivalentCode' => OrderStatus::CODE_SENT]);
+        $amounts = [
+            OrderStatus::CODE_PAID => '11', OrderStatus::CODE_PROCESSING => '22', OrderStatus::CODE_SENT => '33',
+            OrderStatus::CODE_NOT_PAID => '440', OrderStatus::CODE_CANCELED => '550', OrderStatus::CODE_REFUNDED => '660',
+        ];
+        $day = 1;
+        foreach ($amounts as $code => $amount) {
+            $this->order($customer, $code, $amount, \sprintf('2001-03-%02d 10:00:00', $day++));
+        }
+        $order = $this->order($customer, OrderStatus::CODE_NOT_PAID, '7', '2001-03-20 10:00:00');
+        $order->setStatusId($ownSent->getId())->save($this->getPropelConnection());
+
+        $kpis = $this->provider(true)->compute($customer, $this->now)->kpis;
+        $revenue = (new OrderRepository())->getRevenue(new DateRange(
+            new \DateTimeImmutable('2001-03-01 00:00:00'),
+            new \DateTimeImmutable('2001-03-31 23:59:59'),
+            'custom',
+        ));
+
+        self::assertNotNull($kpis);
+        self::assertEqualsWithDelta(73.0, $kpis->totalSpent, 0.001, '11 + 22 + 33 + 7 on a status answering for sent.');
+        self::assertEqualsWithDelta($revenue, $kpis->totalSpent, 0.001, 'The sheet total is the dashboard revenue over the same orders.');
     }
 
     public function testACustomerWithoutOrderHasFiguresAtZeroAndNoAverage(): void
