@@ -85,7 +85,7 @@ final readonly class CustomerRepository
             $alias = self::COMPUTED_SORT_FIELDS[$filters->sort];
             $expression = $filters->sort === 'total_spent'
                 ? CustomerFilters::totalSpentSqlExpression('customer.id', $revenueStatusIds)
-                : self::orderCountSubquery();
+                : CustomerFilters::orderCountSqlExpression('customer.id', $revenueStatusIds);
             $rowsQuery->withColumn($expression, $alias);
             $rowsQuery->orderBy($alias, $direction);
         } else {
@@ -139,7 +139,8 @@ final readonly class CustomerRepository
     }
 
     /**
-     * Order count per customer for the given list.
+     * Order count per customer for the given list, on the revenue statuses only (see
+     * {@see CustomerFilters::orderCountSqlExpression()}).
      *
      * @param list<int> $customerIds
      *
@@ -155,6 +156,7 @@ final readonly class CustomerRepository
         $sql = 'SELECT customer_id, COUNT(*) AS total
             FROM `order`
             WHERE customer_id IN ('.$placeholders.')
+              AND status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
             GROUP BY customer_id';
 
         $statement = Propel::getConnection()->prepare($sql);
@@ -355,7 +357,9 @@ final readonly class CustomerRepository
     public function getOrderCountBounds(): array
     {
         $sql = 'SELECT MAX(cnt) AS max_val FROM (
-            SELECT COUNT(*) AS cnt FROM `order` GROUP BY customer_id
+            SELECT COUNT(*) AS cnt FROM `order`
+            WHERE status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
+            GROUP BY customer_id
         ) AS sub';
 
         $statement = Propel::getConnection()->prepare($sql);
@@ -412,11 +416,6 @@ final readonly class CustomerRepository
         $filters->applyTo($query, $revenueStatusIds);
 
         return $query;
-    }
-
-    private static function orderCountSubquery(): string
-    {
-        return '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = customer.id)';
     }
 
     private static function roundUpToNice(float $value): int

@@ -28,7 +28,8 @@ use Thelia\Test\IntegrationTestCase;
  * as the dashboard revenue: paid, processing, sent, and any status of the shop's own
  * that answers for one of them. A cancelled, refunded or still unpaid order is not
  * money spent, and the column, its sort, its range filter and the slider bounds of
- * the customer list all have to agree on that.
+ * the customer list all have to agree on that. The order count of the list counts the
+ * same orders, as the customer sheet does.
  */
 final class CustomerListTotalSpentTest extends IntegrationTestCase
 {
@@ -85,6 +86,65 @@ final class CustomerListTotalSpentTest extends IntegrationTestCase
         self::assertLessThan(900000.0, $this->customers->getTotalSpentBounds()['max']);
     }
 
+    public function testTheOrderCountOnlyCountsTheOrdersTheShopEarned(): void
+    {
+        [$mixed, $paidOnly] = $this->twoCustomers();
+
+        $counts = $this->customers->findOrderCounts([(int) $mixed->getId(), (int) $paidOnly->getId()]);
+
+        self::assertSame(2, $counts[(int) $mixed->getId()], 'The paid order and the one on a status answering for paid; the unpaid, cancelled and refunded ones are left out.');
+        self::assertSame(1, $counts[(int) $paidOnly->getId()]);
+    }
+
+    public function testTheOrderCountSortAndRangeUseTheSameCount(): void
+    {
+        [$mixed, $paidOnly] = $this->twoCustomers();
+
+        $sorted = $this->customers->findPaginated($this->filters(['order' => 'order_count', 'direction' => 'asc']), 1, 10);
+        self::assertSame([(int) $paidOnly->getId(), (int) $mixed->getId()], $this->ids($sorted['rows']), 'One order counted comes before two.');
+
+        $ranged = $this->customers->findPaginated($this->filters(['min_orders' => '2', 'max_orders' => '2']), 1, 10);
+        self::assertSame([(int) $mixed->getId()], $this->ids($ranged['rows']), 'Five orders placed, two counted.');
+    }
+
+    public function testACustomerWhoseOnlyOrderWasCancelledIsNotATopSpender(): void
+    {
+        $title = $this->factory->customerTitle();
+        $spender = $this->factory->customer($title, ['lastname' => $this->marker]);
+        $cancelled = $this->factory->customer($title, ['lastname' => $this->marker]);
+        $this->factory->order($spender, ['statusCode' => OrderStatus::CODE_PAID, 'postage' => '30']);
+        $this->factory->order($cancelled, ['statusCode' => OrderStatus::CODE_CANCELED, 'postage' => '500']);
+
+        $page = $this->customers->findPaginated($this->filters(['period' => CustomerFilters::PERIOD_TOP_SPENDERS]), 1, 10);
+
+        self::assertSame([(int) $spender->getId()], $this->ids($page['rows']), 'Top spenders must have spent something: the cancelled order is not money spent.');
+    }
+
+    public function testCancelledOrdersDoNotStretchTheOrderCountSlider(): void
+    {
+        $customer = $this->factory->customer($this->factory->customerTitle(), ['lastname' => $this->marker]);
+        for ($i = 0; $i < 60; ++$i) {
+            $this->factory->order($customer, ['statusCode' => OrderStatus::CODE_CANCELED]);
+        }
+
+        self::assertLessThan(60, $this->customers->getOrderCountBounds()['max']);
+    }
+
+    /**
+     * @param iterable<Customer> $rows
+     *
+     * @return list<int>
+     */
+    private function ids(iterable $rows): array
+    {
+        $ids = [];
+        foreach ($rows as $customer) {
+            $ids[] = (int) $customer->getId();
+        }
+
+        return $ids;
+    }
+
     /**
      * @return array{0: Customer, 1: Customer}
      */
@@ -113,6 +173,7 @@ final class CustomerListTotalSpentTest extends IntegrationTestCase
      */
     private function filters(array $query): CustomerFilters
     {
-        return CustomerFilters::fromRequest(new Request(['search' => $this->marker] + $query));
+        // `q` is the search parameter of the customer list: it keeps the page to this test's customers.
+        return CustomerFilters::fromRequest(new Request(['q' => $this->marker] + $query));
     }
 }

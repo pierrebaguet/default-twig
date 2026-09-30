@@ -297,6 +297,20 @@ final readonly class CustomerFilters
     }
 
     /**
+     * The orders a customer placed that the shop earned money from, as a SQL expression
+     * correlated on $customerIdColumn: the same orders {@see totalSpentSqlExpression()}
+     * adds up, so that the order count and the total spent of the list, and the figures of
+     * the customer sheet, agree.
+     *
+     * @param list<int> $revenueStatusIds
+     */
+    public static function orderCountSqlExpression(string $customerIdColumn, array $revenueStatusIds): string
+    {
+        return '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = '.$customerIdColumn
+            .' AND `order`.status_id IN ('.self::statusIdListSql($revenueStatusIds).'))';
+    }
+
+    /**
      * Status ids as a SQL list. Every value is an integer by signature; an empty list
      * becomes `0`, which no primary key matches.
      *
@@ -332,7 +346,7 @@ final readonly class CustomerFilters
         $this->applyPhone($query);
         $this->applyTags($query);
         $this->applyTotalSpentRange($query, $revenueStatusIds);
-        $this->applyOrderCountRange($query);
+        $this->applyOrderCountRange($query, $revenueStatusIds);
         $this->applySearch($query);
 
         return $query;
@@ -456,14 +470,16 @@ final readonly class CustomerFilters
         }
     }
 
-    private function applyOrderCountRange(CustomerQuery $query): void
+    /**
+     * @param list<int> $revenueStatusIds
+     */
+    private function applyOrderCountRange(CustomerQuery $query, array $revenueStatusIds): void
     {
         if ($this->minOrderCount === null && $this->maxOrderCount === null) {
             return;
         }
 
-        $expression = '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = '
-            .CustomerTableMap::COL_ID.')';
+        $expression = self::orderCountSqlExpression(CustomerTableMap::COL_ID, $revenueStatusIds);
 
         if ($this->minOrderCount !== null) {
             $query->where($expression.' >= ?', $this->minOrderCount, \PDO::PARAM_INT);
