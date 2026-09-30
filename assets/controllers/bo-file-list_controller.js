@@ -212,10 +212,6 @@ export default class extends Controller {
         warning.classList.toggle('d-none', described || Boolean(decorative && decorative.checked));
     }
 
-    withToken(url) {
-        return `${url}${url.includes('?') ? '&' : '?'}_token=${encodeURIComponent(this.tokenValue)}`;
-    }
-
     async toggle(event) {
         const button = event.currentTarget;
         const icon = button.querySelector('i');

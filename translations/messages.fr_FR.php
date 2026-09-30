@@ -413,7 +413,6 @@ return [
     'These codes will not be shown again. Keep them somewhere safe, away from your phone.' => 'Ces codes ne seront plus affichés. Conservez-les en lieu sûr, ailleurs que sur votre téléphone.',
     'This address has a company name but is missing a registration number or a VAT number. An invoice for a business buyer requires both.' => 'Cette adresse porte une raison sociale mais il manque son numéro d\'immatriculation ou son numéro de TVA. Une facture destinée à un professionnel exige les deux.',
     'This address is not recognised. Accepted platforms: %platforms%.' => 'Cette adresse n’est pas reconnue. Plateformes acceptées : %platforms%.',
-    'This address is not recognised. Accepted platforms: %platforms.' => 'Cette adresse n’est pas reconnue. Plateformes acceptées : %platforms.',
     'This administrator will sign in with their password alone, then enable two-step verification again. Do this only once you are sure of who asks for it.' => 'Cet administrateur se connectera avec son seul mot de passe, puis réactivera la vérification en deux étapes. Ne le faites qu\'après vous être assuré de l\'identité de la personne qui le demande.',
     'This cannot be undone.' => 'Cette action est irréversible.',
     'This code does not match. Check the time of your device and try again.' => 'Ce code ne correspond pas. Vérifiez l\'heure de votre appareil et réessayez.',

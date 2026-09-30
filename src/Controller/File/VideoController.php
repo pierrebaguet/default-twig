@@ -371,7 +371,7 @@ final class VideoController
     private function checkCsrf(): void
     {
         $request = $this->requestStack->getCurrentRequest();
-        $token = (string) ($request?->request->get('_token') ?? $request?->query->get('_token') ?? '');
+        $token = (string) ($request?->request->get('_token') ?? '');
         $this->tokens->checkToken($token);
     }
 
