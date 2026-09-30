@@ -15,11 +15,13 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\DTO\Report;
 
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
+use Thelia\Domain\Cart\Service\CartPurgeHorizon;
 
 /**
- * Carts are purged on their creation date while orders are kept: a period that
- * reaches before the oldest cart would compare orders to carts that no longer
- * exist, so the funnel starts on the day of the oldest cart still in the database.
+ * The purge deletes the carts without order past their retention while orders
+ * are kept: before the purge horizon, orders would be compared to carts that no
+ * longer exist, so the funnel starts on the horizon, to the second. The oldest
+ * cart in base says nothing here: a cart that led to an order is never purged.
  */
 final readonly class FunnelCoverage
 {
@@ -32,17 +34,16 @@ final readonly class FunnelCoverage
     ) {
     }
 
-    public static function resolve(DateRange $requested, ?\DateTimeImmutable $oldestCart, int $retentionDays): self
+    public static function resolve(DateRange $requested, CartPurgeHorizon $horizon, \DateTimeImmutable $now): self
     {
-        $oldestCartDay = $oldestCart?->setTime(0, 0);
-        $truncated = null !== $oldestCartDay && $oldestCartDay > $requested->from;
+        $truncated = $horizon->mayHavePurged($requested->from, $now);
 
         return new self(
             requestedFrom: $requested->from,
-            from: $truncated ? $oldestCartDay : $requested->from,
+            from: $truncated ? $horizon->earliestSurvivingCartDate($now) : $requested->from,
             to: $requested->to,
             truncated: $truncated,
-            retentionDays: $retentionDays,
+            retentionDays: $horizon->retentionDays(),
         );
     }
 }

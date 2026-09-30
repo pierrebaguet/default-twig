@@ -17,7 +17,6 @@ namespace BackOfficeDefaultTwigBundle\Tests\Service\Report;
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionStepView;
 use BackOfficeDefaultTwigBundle\DTO\Report\SearchLogAvailability;
-use BackOfficeDefaultTwigBundle\Repository\CartRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
 use BackOfficeDefaultTwigBundle\Service\Report\ConversionReportProvider;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\NullSearchLogReader;
@@ -29,7 +28,9 @@ use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Core\Security\SecurityContext;
 use Thelia\Core\Translation\Translator;
 use Thelia\Domain\Cart\Service\CartPurgeHorizon;
+use Thelia\Domain\Cart\Service\CartPurger;
 use Thelia\Domain\Report\ConversionFunnel\ConversionFunnelCalculator;
+use Thelia\Model\CartQuery;
 use Thelia\Test\IntegrationTestCase;
 
 final class ConversionReportProviderTest extends IntegrationTestCase
@@ -103,45 +104,48 @@ final class ConversionReportProviderTest extends IntegrationTestCase
         self::assertNotNull($report->exportUrl, 'A full administrator gets the export link.');
     }
 
-    public function testTheCoverageStartsOnTheOldestCartStillInTheDatabase(): void
+    public function testTodayIsNotCutByThePurgeHorizon(): void
     {
-        $oldestCart = (new CartRepository())->oldestCartCreatedAt();
-        $retentionDays = CartPurgeHorizon::fromConfig()->retentionDays();
-
-        foreach ([DateRange::PRESET_TODAY, DateRange::PRESET_THIS_YEAR] as $preset) {
-            $range = DateRange::fromPreset($preset);
-            $coverage = $this->provider()->compute($range, self::LOCALE)->coverage;
-
-            self::assertEquals($range->from, $coverage->requestedFrom);
-            self::assertEquals($range->to, $coverage->to);
-            self::assertSame($retentionDays, $coverage->retentionDays);
-            self::assertSame(
-                null !== $oldestCart && $oldestCart->setTime(0, 0) > $range->from,
-                $coverage->truncated,
-                \sprintf('"%s": truncated only when the oldest cart is later than the start of the period.', $preset),
-            );
-            self::assertEquals($coverage->truncated ? $oldestCart?->setTime(0, 0) : $range->from, $coverage->from);
-        }
-    }
-
-    /**
-     * The test database may hold no cart at all. A cart created now, inside the
-     * rolled-back transaction, is then the oldest one: the year is cut to today.
-     */
-    public function testAYearThatReachesBeforeTheOldestCartIsComputedFromThatCart(): void
-    {
-        if (null !== (new CartRepository())->oldestCartCreatedAt()) {
-            self::markTestSkipped('The test database already holds carts: the oldest one is not controlled by this test.');
-        }
-
-        $this->createFixtureFactory()->cart();
-        $range = DateRange::fromPreset(DateRange::PRESET_THIS_YEAR);
+        $range = DateRange::fromPreset(DateRange::PRESET_TODAY);
 
         $coverage = $this->provider()->compute($range, self::LOCALE)->coverage;
 
-        self::assertTrue($coverage->truncated);
+        self::assertFalse($coverage->truncated);
+        self::assertEquals($range->from, $coverage->from);
+        self::assertEquals($range->to, $coverage->to);
+    }
+
+    /**
+     * A cart that led to an order is never purged, so the oldest cart of a shop
+     * says nothing about the carts without order the purge already deleted.
+     */
+    public function testAPeriodReachingBeforeThePurgeHorizonIsCutThereEvenWhenAnOrderedCartIsOlder(): void
+    {
+        $connection = $this->getPropelConnection();
+        $factory = $this->createFixtureFactory();
+        $horizon = CartPurgeHorizon::fromConfig();
+        $earliestSurvivingBefore = $horizon->earliestSurvivingCartDate();
+
+        $order = $factory->order();
+        CartQuery::create()->findPk($order->getCartId(), $connection)
+            ->setCreatedAt(\DateTime::createFromImmutable($earliestSurvivingBefore->modify('-200 days')))
+            ->save($connection);
+
+        $from = $earliestSurvivingBefore->modify('-10 days')->setTime(0, 0);
+        $abandoned = $factory->cart();
+        $abandoned->setCreatedAt(\DateTime::createFromImmutable($from->modify('+1 day')))->save($connection);
+        (new CartPurger())->purgeAnonymousCarts($horizon->retentionDays());
+        self::assertNull(CartQuery::create()->findPk($abandoned->getId(), $connection), 'Precondition: the purge deleted the abandoned cart.');
+
+        $range = new DateRange($from, (new \DateTimeImmutable())->setTime(23, 59, 59), DateRange::PRESET_NINETY_DAYS);
+        $coverage = $this->provider()->compute($range, self::LOCALE)->coverage;
+        $earliestSurvivingAfter = $horizon->earliestSurvivingCartDate();
+
+        self::assertTrue($coverage->truncated, 'The period starts before the purge horizon: its carts without order are gone.');
         self::assertEquals($range->from, $coverage->requestedFrom);
-        self::assertEquals((new \DateTimeImmutable())->setTime(0, 0), $coverage->from);
+        self::assertGreaterThanOrEqual($earliestSurvivingBefore, $coverage->from);
+        self::assertLessThanOrEqual($earliestSurvivingAfter, $coverage->from);
+        self::assertSame($horizon->retentionDays(), $coverage->retentionDays);
     }
 
     public function testThePeriodPillsKeepTheSearchesTabOpen(): void
@@ -186,7 +190,6 @@ final class ConversionReportProviderTest extends IntegrationTestCase
 
         return new ConversionReportProvider(
             new ConversionFunnelCalculator(),
-            new CartRepository(),
             $this->periodOptions(),
             new SearchLogReportBuilder(new NullSearchLogReader(SearchLogAvailability::ModuleMissing), $urls),
             $this->securityContext,

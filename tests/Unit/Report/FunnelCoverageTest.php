@@ -17,57 +17,62 @@ namespace BackOfficeDefaultTwigBundle\Tests\Unit\Report;
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\FunnelCoverage;
 use PHPUnit\Framework\TestCase;
+use Thelia\Domain\Cart\Service\CartPurgeHorizon;
 
 final class FunnelCoverageTest extends TestCase
 {
-    private const RETENTION_DAYS = 30;
+    private const NOW = '2026-09-24 15:00:00';
 
-    public function testAPeriodThatReachesBeforeTheOldestCartStartsOnTheDayOfThatCart(): void
+    public function testAPeriodThatReachesBeforeThePurgeHorizonStartsOnTheHorizon(): void
     {
-        $requested = $this->range('2026-01-01 00:00:00', '2026-09-24 23:59:59');
+        $requested = $this->range('2026-01-01 00:00:00');
 
-        $coverage = FunnelCoverage::resolve($requested, new \DateTimeImmutable('2026-08-25 14:12:00'), self::RETENTION_DAYS);
+        $coverage = FunnelCoverage::resolve($requested, new CartPurgeHorizon(60, 30), new \DateTimeImmutable(self::NOW));
 
         self::assertTrue($coverage->truncated);
         self::assertEquals($requested->from, $coverage->requestedFrom);
-        self::assertEquals(new \DateTimeImmutable('2026-08-25 00:00:00'), $coverage->from);
+        self::assertEquals(new \DateTimeImmutable('2026-08-25 15:00:00'), $coverage->from);
         self::assertEquals($requested->to, $coverage->to);
-        self::assertSame(self::RETENTION_DAYS, $coverage->retentionDays);
+        self::assertSame(30, $coverage->retentionDays);
     }
 
-    public function testAPeriodThatStartsAfterTheOldestCartIsKeptAsRequested(): void
+    public function testAPeriodStartingAtMidnightOnTheHorizonDayIsCutToTheSecondOfThePurge(): void
     {
-        $requested = $this->range('2026-09-18 00:00:00', '2026-09-24 23:59:59');
+        $coverage = FunnelCoverage::resolve(
+            $this->range('2026-08-25 00:00:00'),
+            new CartPurgeHorizon(60, 30),
+            new \DateTimeImmutable(self::NOW),
+        );
 
-        $coverage = FunnelCoverage::resolve($requested, new \DateTimeImmutable('2026-08-25 14:12:00'), self::RETENTION_DAYS);
+        self::assertTrue($coverage->truncated, 'The carts of 2026-08-25 before 15:00 are older than now - 30 days: the purge deletes them.');
+        self::assertEquals(new \DateTimeImmutable('2026-08-25 15:00:00'), $coverage->from);
+    }
+
+    public function testAPeriodThatStartsAfterThePurgeHorizonIsKeptAsRequested(): void
+    {
+        $requested = $this->range('2026-09-18 00:00:00');
+
+        $coverage = FunnelCoverage::resolve($requested, new CartPurgeHorizon(60, 30), new \DateTimeImmutable(self::NOW));
 
         self::assertFalse($coverage->truncated);
         self::assertEquals($requested->from, $coverage->from);
         self::assertEquals($requested->from, $coverage->requestedFrom);
     }
 
-    public function testAnOldestCartCreatedOnTheFirstDayOfThePeriodDoesNotTruncateIt(): void
+    public function testTheHorizonFollowsTheShorterOfTheTwoRetentions(): void
     {
-        $requested = $this->range('2026-09-18 00:00:00', '2026-09-24 23:59:59');
+        $coverage = FunnelCoverage::resolve(
+            $this->range('2026-01-01 00:00:00'),
+            new CartPurgeHorizon(10, 90),
+            new \DateTimeImmutable(self::NOW),
+        );
 
-        $coverage = FunnelCoverage::resolve($requested, new \DateTimeImmutable('2026-09-18 09:30:00'), self::RETENTION_DAYS);
-
-        self::assertFalse($coverage->truncated, 'The covered window starts at 00:00 of the oldest cart: the same day is fully covered.');
-        self::assertEquals($requested->from, $coverage->from);
+        self::assertEquals(new \DateTimeImmutable('2026-09-14 15:00:00'), $coverage->from);
+        self::assertSame(10, $coverage->retentionDays);
     }
 
-    public function testAShopWithoutAnyCartKeepsThePeriodAsRequested(): void
+    private function range(string $from): DateRange
     {
-        $requested = $this->range('2026-01-01 00:00:00', '2026-09-24 23:59:59');
-
-        $coverage = FunnelCoverage::resolve($requested, null, self::RETENTION_DAYS);
-
-        self::assertFalse($coverage->truncated);
-        self::assertEquals($requested->from, $coverage->from);
-    }
-
-    private function range(string $from, string $to): DateRange
-    {
-        return new DateRange(new \DateTimeImmutable($from), new \DateTimeImmutable($to), DateRange::PRESET_THIS_YEAR);
+        return new DateRange(new \DateTimeImmutable($from), new \DateTimeImmutable('2026-09-24 23:59:59'), DateRange::PRESET_THIS_YEAR);
     }
 }

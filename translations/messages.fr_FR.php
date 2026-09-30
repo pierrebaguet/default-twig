@@ -241,7 +241,7 @@ return [
     'New customer tag' => 'Nouvelle étiquette client',
     'New tags, separated by commas' => 'Nouvelles étiquettes, séparées par des virgules',
     'Next return' => 'Retour suivant',
-    'No cart created before %date% is kept in the database (the maintenance command purges carts after %days% days): the funnel and the rate are computed from %date% to %to%. Older orders stay visible on the dashboard.' => 'Aucun panier créé avant le %date% n\'est conservé en base (la commande de maintenance purge les paniers après %days% jours) : le tunnel et le taux sont calculés du %date% au %to%. Les commandes plus anciennes restent visibles sur le tableau de bord.',
+    'The maintenance command purges the carts without order after %days% days: the funnel and the rate are computed from %date% to %to%. Older orders stay visible on the dashboard.' => 'La commande de maintenance purge les paniers sans commande après %days% jours : le tunnel et le taux sont calculés du %date% au %to%. Les commandes plus anciennes restent visibles sur le tableau de bord.',
     'No checkout layout was chosen.' => 'Aucun affichage du tunnel de commande n\'a été choisi.',
     'No checkout step defined yet.' => 'Aucune étape de tunnel de commande définie pour le moment.',
     'No code to type: fill in the title, it is the public label shown to the buyer, and it is required.' => 'Aucun code à saisir : renseignez le titre, c\'est le libellé public affiché à l\'acheteur, il est obligatoire.',

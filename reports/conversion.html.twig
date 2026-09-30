@@ -73,7 +73,7 @@
                 {% if report.coverage.truncated %}
                     <div class="alert alert-info d-flex align-items-start gap-2" data-testid="report-coverage-notice">
                         <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
-                        <span>{{ 'No cart created before %date% is kept in the database (the maintenance command purges carts after %days% days): the funnel and the rate are computed from %date% to %to%. Older orders stay visible on the dashboard.'|trans({
+                        <span>{{ 'The maintenance command purges the carts without order after %days% days: the funnel and the rate are computed from %date% to %to%. Older orders stay visible on the dashboard.'|trans({
                             '%date%': report.coverage.from|date('d/m/Y'),
                             '%days%': report.coverage.retentionDays,
                             '%to%': report.coverage.to|date('d/m/Y'),

@@ -14,10 +14,11 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
-use BackOfficeDefaultTwigBundle\Repository\CartRepository;
+use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Domain\Cart\Service\CartPurgeHorizon;
 use Thelia\Model\Admin;
 use Thelia\Model\ConfigQuery;
 use Thelia\Test\FixtureFactory;
@@ -121,19 +122,21 @@ final class ConversionReportScreenTest extends WebIntegrationTestCase
 
     public function testAYearCutByThePurgeSaysSoAndShowsTheCoveredDates(): void
     {
-        if (null !== (new CartRepository())->oldestCartCreatedAt()) {
-            self::markTestSkipped('The test database already holds carts: the oldest one is not controlled by this test.');
+        $horizon = CartPurgeHorizon::fromConfig();
+        if (!$horizon->mayHavePurged(DateRange::fromPreset(DateRange::PRESET_THIS_YEAR)->from)) {
+            self::markTestSkipped('The year started inside the cart retention: nothing to cut.');
         }
 
         $this->loginAs($this->factory->admin());
-        $this->factory->cart();
 
         $this->assertPageRenders(self::URL.'?period=year');
 
         $crawler = $this->client->getCrawler();
-        $today = (new \DateTimeImmutable())->format('d/m/Y');
         self::assertCount(1, $crawler->filter('[data-testid="report-coverage-notice"]'));
-        self::assertStringStartsWith($today, trim($crawler->filter('[data-testid="report-range"]')->text()));
+        self::assertStringStartsWith(
+            $horizon->earliestSurvivingCartDate()->format('d/m/Y'),
+            trim($crawler->filter('[data-testid="report-range"]')->text()),
+        );
     }
 
     public function testAnOrderOnlyAdministratorGetsTheFunnelWithoutTheSearchesNorTheExport(): void

@@ -18,7 +18,6 @@ use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionReport;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionStepView;
 use BackOfficeDefaultTwigBundle\DTO\Report\FunnelCoverage;
-use BackOfficeDefaultTwigBundle\Repository\CartRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -70,7 +69,6 @@ final readonly class ConversionReportProvider
 
     public function __construct(
         private ConversionFunnelCalculator $calculator,
-        private CartRepository $carts,
         private PeriodOptions $periodOptions,
         private SearchLogReportBuilder $searchLogReportBuilder,
         private SecurityContext $securityContext,
@@ -81,11 +79,7 @@ final readonly class ConversionReportProvider
 
     public function compute(DateRange $range, string $locale, string $currentTab = self::TAB_FUNNEL): ConversionReport
     {
-        $coverage = FunnelCoverage::resolve(
-            $range,
-            $this->carts->oldestCartCreatedAt(),
-            CartPurgeHorizon::fromConfig()->retentionDays(),
-        );
+        $coverage = FunnelCoverage::resolve($range, CartPurgeHorizon::fromConfig(), new \DateTimeImmutable());
         $funnel = $this->calculator->total($coverage->from, $coverage->to);
         $searchLog = $this->canView(AdminResources::PRODUCT) ? $this->searchLogReportBuilder->build() : null;
 
