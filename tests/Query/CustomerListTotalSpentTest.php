@@ -61,11 +61,21 @@ final class CustomerListTotalSpentTest extends IntegrationTestCase
     public function testTheSortRanksOnTheSameTotal(): void
     {
         [$mixed, $paidOnly] = $this->twoCustomers();
+        $middle = $this->factory->customer($this->factory->customerTitle(), ['lastname' => $this->marker]);
+        $this->factory->order($middle, ['statusCode' => OrderStatus::CODE_PAID, 'postage' => '40']);
 
-        $page = $this->customers->findPaginated($this->filters(['order' => 'total_spent', 'direction' => 'desc']), 1, 10);
+        // Created in an order the totals do not follow, either way: a sort that fell back
+        // on the creation date would not give these results.
+        $connection = $this->getPropelConnection();
+        foreach ([[$mixed, '2020-01-01'], [$paidOnly, '2020-01-02'], [$middle, '2020-01-03']] as [$customer, $date]) {
+            $connection->prepare('UPDATE customer SET created_at = ? WHERE id = ?')->execute([$date.' 10:00:00', $customer->getId()]);
+        }
 
-        $ids = array_map(static fn (Customer $customer): int => (int) $customer->getId(), iterator_to_array($page['rows']));
-        self::assertSame([(int) $paidOnly->getId(), (int) $mixed->getId()], $ids, 'The customer who spent 50 comes before the one who spent 37.');
+        $descending = $this->customers->findPaginated($this->filters(['order' => 'total_spent', 'direction' => 'desc']), 1, 10);
+        self::assertSame([(int) $paidOnly->getId(), (int) $middle->getId(), (int) $mixed->getId()], $this->ids($descending['rows']), '50, then 40, then 37.');
+
+        $ascending = $this->customers->findPaginated($this->filters(['order' => 'total_spent', 'direction' => 'asc']), 1, 10);
+        self::assertSame([(int) $mixed->getId(), (int) $middle->getId(), (int) $paidOnly->getId()], $this->ids($ascending['rows']), '37, then 40, then 50.');
     }
 
     public function testTheRangeFilterSelectsOnTheSameTotal(): void
