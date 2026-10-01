@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
+import { loadHtmlFragment } from '../lib/html-fragment.js';
 
 // Loads the body of a collapsible section the first time it opens, so a heavy section
 // costs nothing to a page that never shows it. The URL answers a plain GET with an HTML
@@ -39,23 +40,7 @@ export default class extends Controller {
         }
 
         this.loaded = true;
-        try {
-            const response = await fetch(this.urlValue, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            this.bodyTarget.innerHTML = await response.text();
-        } catch (error) {
-            // Let the next opening try again.
-            this.loaded = false;
-            const alert = document.createElement('div');
-            alert.className = 'alert alert-danger mb-0';
-            alert.setAttribute('role', 'alert');
-            alert.textContent = this.errorMessageValue;
-            this.bodyTarget.replaceChildren(alert);
-        }
+        // A failed load lets the next opening try again.
+        this.loaded = await loadHtmlFragment(this.urlValue, this.bodyTarget, this.errorMessageValue);
     }
 }

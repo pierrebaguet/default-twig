@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
+import { loadHtmlFragment } from '../lib/html-fragment.js';
 
 export default class extends Controller {
     connect() {
@@ -24,12 +25,9 @@ export default class extends Controller {
         }
 
         button.dataset.loaded = '1';
-        try {
-            const response = await fetch(href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-            pane.innerHTML = await response.text();
-        } catch (error) {
+        const loaded = await loadHtmlFragment(href, pane, button.dataset.errorMessage || 'Unable to load this tab.');
+        if (!loaded) {
             button.dataset.loaded = '';
-            pane.innerHTML = `<div class="alert alert-danger">${button.dataset.errorMessage || 'Unable to load this tab.'}</div>`;
         }
     }
 }
