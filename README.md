@@ -212,7 +212,7 @@ Twig back-office. Open an issue if your module needs one that is missing. The `<
 
 #### Adding a section to the customer sheet
 
-The customer sheet is made of collapsible sections (overview, addresses, orders, carts). A module
+The customer sheet is made of collapsible sections (overview, addresses, orders, carts, personal data). A module
 adds its own section, for internal notes, support messages or recently viewed products, through
 one of these hooks. The context holds `customer`, `customer_id` and `id`, all the customer id.
 

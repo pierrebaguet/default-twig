@@ -194,7 +194,7 @@ final class CustomerSheetTest extends WebIntegrationTestCase
     {
         $crawler = $this->sheet($this->customer(), $this->factory->admin());
 
-        foreach (['customer-section-overview', 'customer-addresses-section', 'customer-orders-section', 'customer-carts-section'] as $testid) {
+        foreach (['customer-section-overview', 'customer-addresses-section', 'customer-orders-section', 'customer-carts-section', 'customer-personal-data-section'] as $testid) {
             self::assertCount(1, $crawler->filter('[data-testid="'.$testid.'"]'), $testid.' is on the sheet.');
             self::assertCount(1, $crawler->filter('[data-testid="'.$testid.'-toggle"][data-bs-toggle="collapse"]'), $testid.' folds.');
         }

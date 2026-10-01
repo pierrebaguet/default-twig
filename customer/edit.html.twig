@@ -241,34 +241,6 @@
                             {{ 'Registered on %date'|trans({ '%date': customer.createdAt ? customer.createdAt|format_datetime('medium', 'short') : '-' }) }}
                         </div>
                     </div>
-
-                    <div class="card mb-3" data-testid="customer-personal-data-card">
-                        <div class="card-header">
-                            <i class="bi bi-shield-lock" aria-hidden="true"></i> {{ 'Personal data'|trans }}
-                        </div>
-                        <div class="card-body">
-                            <p class="small text-muted">
-                                {{ 'Answer a data subject request without touching the accounting record of the orders.'|trans }}
-                            </p>
-                            <div class="d-grid gap-2">
-                                <a href="{{ path('admin.customer.personal_data.export', { customer_id: customer.id }) }}"
-                                   data-bo-post
-                                   class="btn btn-sm btn-outline-primary"
-                                   data-testid="customer-personal-data-export">
-                                    <i class="bi bi-download" aria-hidden="true"></i> {{ 'Download personal data'|trans }}
-                                </a>
-                                {% if is_granted('DELETE', 'admin.customer') %}
-                                    <button type="button" class="btn btn-sm btn-outline-danger"
-                                            data-bs-toggle="modal" data-bs-target="#customer-anonymize-modal"
-                                            data-customer-id="{{ customer.id }}"
-                                            data-testid="customer-anonymize-button">
-                                        <i class="bi bi-eraser" aria-hidden="true"></i> {{ 'Anonymize this customer'|trans }}
-                                    </button>
-                                {% endif %}
-                            </div>
-                            {{ safe_hook('customer.personal-data', { customer_id: customer.id, location: 'customer_personal_data' }) }}
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -443,6 +415,35 @@
                 {% endblock %}
             {% endembed %}
         {% endif %}
+
+        {# ── Personal data ───────────────────────────────────────────────── #}
+        {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+            id: 'personal-data', title: 'Personal data'|trans, icon: 'bi-shield-lock', testid: 'customer-personal-data-section',
+            customer: customer,
+        } only %}
+            {% block section_body %}
+                <p class="small text-muted">
+                    {{ 'Answer a data subject request without touching the accounting record of the orders.'|trans }}
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ path('admin.customer.personal_data.export', { customer_id: customer.id }) }}"
+                       data-bo-post
+                       class="btn btn-sm btn-outline-primary"
+                       data-testid="customer-personal-data-export">
+                        <i class="bi bi-download" aria-hidden="true"></i> {{ 'Download personal data'|trans }}
+                    </a>
+                    {% if is_granted('DELETE', 'admin.customer') %}
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                data-bs-toggle="modal" data-bs-target="#customer-anonymize-modal"
+                                data-customer-id="{{ customer.id }}"
+                                data-testid="customer-anonymize-button">
+                            <i class="bi bi-eraser" aria-hidden="true"></i> {{ 'Anonymize this customer'|trans }}
+                        </button>
+                    {% endif %}
+                </div>
+                {{ safe_hook('customer.personal-data', { customer_id: customer.id, location: 'customer_personal_data' }) }}
+            {% endblock %}
+        {% endembed %}
     </div>
 
     {% if address_create_form is defined and is_granted('CREATE', 'admin.address') %}
