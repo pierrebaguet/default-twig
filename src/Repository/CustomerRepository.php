@@ -26,6 +26,7 @@ use Thelia\Model\CustomerTitle;
 use Thelia\Model\CustomerTitleQuery;
 use Thelia\Model\Lang;
 use Thelia\Model\LangQuery;
+use Thelia\Model\Map\CustomerTableMap;
 
 /**
  * Centralised Propel queries for the customer back-office screens. Mirrors
@@ -71,21 +72,21 @@ final readonly class CustomerRepository
     public function findPaginated(CustomerFilters $filters, int $page, int $perPage): array
     {
         // Read once for the three queries below: the status list is deliberately not memoised.
-        $revenueStatusIds = $this->orders->revenueStatusIds();
+        $revenueStatuses = $this->orders->revenueStatusIdListSql();
 
-        $countQuery = $this->buildFilteredQuery($filters, $revenueStatusIds);
+        $countQuery = $this->buildFilteredQuery($filters, $revenueStatuses);
         $total = (int) $countQuery->count();
         $lastPage = max(1, (int) ceil($total / max(1, $perPage)));
         $page = max(1, min($page, $lastPage));
 
-        $rowsQuery = $this->buildFilteredQuery($filters, $revenueStatusIds);
+        $rowsQuery = $this->buildFilteredQuery($filters, $revenueStatuses);
         $direction = $filters->direction === 'asc' ? Criteria::ASC : Criteria::DESC;
 
         if (\array_key_exists($filters->sort, self::COMPUTED_SORT_FIELDS)) {
             $alias = self::COMPUTED_SORT_FIELDS[$filters->sort];
             $expression = $filters->sort === 'total_spent'
-                ? CustomerFilters::totalSpentSqlExpression('customer.id', $revenueStatusIds)
-                : CustomerFilters::orderCountSqlExpression('customer.id', $revenueStatusIds);
+                ? self::totalSpentSqlExpression('customer.id', $revenueStatuses)
+                : self::orderCountSqlExpression('customer.id', $revenueStatuses);
             $rowsQuery->withColumn($expression, $alias);
             $rowsQuery->orderBy($alias, $direction);
         } else {
@@ -104,7 +105,7 @@ final readonly class CustomerRepository
 
     /**
      * Total spent per customer for a given list of customer IDs, on the revenue statuses
-     * only (see {@see CustomerFilters::totalSpentSqlExpression()}). Returns a map indexed
+     * only (see {@see totalSpentSqlExpression()}). Returns a map indexed
      * by customer_id so the row presenter can hit it in O(1).
      *
      * @param list<int> $customerIds
@@ -140,7 +141,7 @@ final readonly class CustomerRepository
 
     /**
      * Order count per customer for the given list, on the revenue statuses only (see
-     * {@see CustomerFilters::orderCountSqlExpression()}).
+     * {@see orderCountSqlExpression()}).
      *
      * @param list<int> $customerIds
      *
@@ -408,14 +409,61 @@ final readonly class CustomerRepository
     }
 
     /**
-     * @param list<int> $revenueStatusIds
+     * @param string $revenueStatuses the revenue status ids as a SQL list, {@see OrderRepository::revenueStatusIdListSql()}
      */
-    private function buildFilteredQuery(CustomerFilters $filters, array $revenueStatusIds): CustomerQuery
+    private function buildFilteredQuery(CustomerFilters $filters, string $revenueStatuses): CustomerQuery
     {
         $query = CustomerQuery::create();
-        $filters->applyTo($query, $revenueStatusIds);
+        $filters->applyTo($query);
+
+        if ($filters->minTotalSpent !== null || $filters->maxTotalSpent !== null) {
+            $totalSpent = self::totalSpentSqlExpression(CustomerTableMap::COL_ID, $revenueStatuses);
+            if ($filters->minTotalSpent !== null) {
+                $query->where($totalSpent.' >= ?', $filters->minTotalSpent, \PDO::PARAM_STR);
+            }
+            if ($filters->maxTotalSpent !== null) {
+                $query->where($totalSpent.' <= ?', $filters->maxTotalSpent, \PDO::PARAM_STR);
+            }
+        }
+
+        if ($filters->minOrderCount !== null || $filters->maxOrderCount !== null) {
+            $orderCount = self::orderCountSqlExpression(CustomerTableMap::COL_ID, $revenueStatuses);
+            if ($filters->minOrderCount !== null) {
+                $query->where($orderCount.' >= ?', $filters->minOrderCount, \PDO::PARAM_INT);
+            }
+            if ($filters->maxOrderCount !== null) {
+                $query->where($orderCount.' <= ?', $filters->maxOrderCount, \PDO::PARAM_INT);
+            }
+        }
 
         return $query;
+    }
+
+    /**
+     * The money a customer spent, as a SQL expression correlated on $customerIdColumn. Only
+     * the orders in a revenue status count, so that the list column, its sort, its range
+     * filter and the dashboard revenue add up the same orders.
+     *
+     * A flat correlated sub-query on purpose: nesting a derived table around it shadows the
+     * outer customer id, and MariaDB answers "Unknown column".
+     */
+    private static function totalSpentSqlExpression(string $customerIdColumn, string $revenueStatuses): string
+    {
+        return '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression().'), 0) FROM `order`'
+            .' WHERE `order`.customer_id = '.$customerIdColumn
+            .' AND `order`.status_id IN ('.$revenueStatuses.'))';
+    }
+
+    /**
+     * The orders a customer placed that the shop earned money from, as a SQL expression
+     * correlated on $customerIdColumn: the same orders {@see totalSpentSqlExpression()}
+     * adds up, so that the order count and the total spent of the list, and the figures of
+     * the customer sheet, agree.
+     */
+    private static function orderCountSqlExpression(string $customerIdColumn, string $revenueStatuses): string
+    {
+        return '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = '.$customerIdColumn
+            .' AND `order`.status_id IN ('.$revenueStatuses.'))';
     }
 
     private static function roundUpToNice(float $value): int

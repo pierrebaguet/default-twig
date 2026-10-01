@@ -573,19 +573,6 @@ final class OrderRepository
     }
 
     /**
-     * The statuses an order counts as revenue in: paid, processing, sent, and any status of
-     * the shop's own that answers for one of them. Exposed so that every figure calling
-     * itself revenue or money spent (the dashboard, the customer list, the customer sheet)
-     * adds up the same orders.
-     *
-     * @return list<int>
-     */
-    public function revenueStatusIds(): array
-    {
-        return $this->statusIdsAnsweringFor(self::REVENUE_STATUS_CODES);
-    }
-
-    /**
      * The statuses an order still waiting for its payment sits in. Exposed so that the
      * dashboard alert and the order list it links to select the same orders.
      *
@@ -705,7 +692,10 @@ final class OrderRepository
     }
 
     /**
-     * The revenue status ids as a SQL list, for the customer queries written in raw SQL.
+     * The statuses an order counts as revenue in, as a SQL list for the customer queries
+     * written in raw SQL: paid, processing, sent, and any status of the shop's own that
+     * answers for one of them. Exposed so that every figure calling itself revenue or money
+     * spent (the dashboard, the customer list, the customer sheet) adds up the same orders.
      */
     public function revenueStatusIdListSql(): string
     {
@@ -713,24 +703,17 @@ final class OrderRepository
     }
 
     /**
-     * Status ids as a SQL list. Every value is an integer by signature; an empty list
-     * becomes `0`, which no primary key matches.
-     *
-     * @param list<int> $statusIds
-     */
-    public static function idListSql(array $statusIds): string
-    {
-        return [] === $statusIds ? '0' : implode(', ', array_map(static fn (int $id): string => (string) $id, $statusIds));
-    }
-
-    /**
-     * The ids of the statuses answering for these codes, as a SQL list.
+     * The same ids as a SQL list, for the queries written in raw SQL. Every value comes from
+     * a primary key read back from the database and is cast to an integer here; an empty
+     * list becomes `0`, which no primary key matches.
      *
      * @param list<string> $codes
      */
     private function statusIdListSql(array $codes): string
     {
-        return self::idListSql($this->statusIdsAnsweringFor($codes));
+        $ids = $this->statusIdsAnsweringFor($codes);
+
+        return [] === $ids ? '0' : implode(', ', $ids);
     }
 
     private function buildFilteredQuery(OrderFilters $filters): OrderQuery

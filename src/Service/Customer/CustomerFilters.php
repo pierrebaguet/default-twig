@@ -14,8 +14,6 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Service\Customer;
 
-use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
-use BackOfficeDefaultTwigBundle\Service\Order\OrderFilters;
 use Propel\Runtime\ActiveQuery\Criteria;
 use Symfony\Component\HttpFoundation\Request;
 use Thelia\Model\CustomerQuery;
@@ -281,40 +279,10 @@ final readonly class CustomerFilters
     }
 
     /**
-     * The money a customer spent, as a SQL expression correlated on $customerIdColumn. Only
-     * the orders in a revenue status count, so that the list column, its sort, its range
-     * filter and the dashboard revenue add up the same orders.
-     *
-     * A flat correlated sub-query on purpose: nesting a derived table around it shadows the
-     * outer customer id, and MariaDB answers "Unknown column".
-     *
-     * @param list<int> $revenueStatusIds
+     * Applies the filters on the customer row. The ranges on the total spent and the order
+     * count are figures computed from the orders: the repository applies them.
      */
-    public static function totalSpentSqlExpression(string $customerIdColumn, array $revenueStatusIds): string
-    {
-        return '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression().'), 0) FROM `order`'
-            .' WHERE `order`.customer_id = '.$customerIdColumn
-            .' AND `order`.status_id IN ('.OrderRepository::idListSql($revenueStatusIds).'))';
-    }
-
-    /**
-     * The orders a customer placed that the shop earned money from, as a SQL expression
-     * correlated on $customerIdColumn: the same orders {@see totalSpentSqlExpression()}
-     * adds up, so that the order count and the total spent of the list, and the figures of
-     * the customer sheet, agree.
-     *
-     * @param list<int> $revenueStatusIds
-     */
-    public static function orderCountSqlExpression(string $customerIdColumn, array $revenueStatusIds): string
-    {
-        return '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = '.$customerIdColumn
-            .' AND `order`.status_id IN ('.OrderRepository::idListSql($revenueStatusIds).'))';
-    }
-
-    /**
-     * @param list<int> $revenueStatusIds the statuses the "total spent" range counts, see {@see totalSpentSqlExpression()}
-     */
-    public function applyTo(CustomerQuery $query, array $revenueStatusIds): CustomerQuery
+    public function applyTo(CustomerQuery $query): CustomerQuery
     {
         if ($this->createdFrom !== null) {
             $query->filterByCreatedAt($this->createdFrom->format('Y-m-d H:i:s'), Criteria::GREATER_EQUAL);
@@ -335,8 +303,6 @@ final readonly class CustomerFilters
         $this->applyCountry($query);
         $this->applyPhone($query);
         $this->applyTags($query);
-        $this->applyTotalSpentRange($query, $revenueStatusIds);
-        $this->applyOrderCountRange($query, $revenueStatusIds);
         $this->applySearch($query);
 
         return $query;
@@ -439,44 +405,6 @@ final readonly class CustomerFilters
                 .' AND te.element_key = ? AND te.tag_id IN ('.$placeholders.'))',
             [TagElement::ELEMENT_KEY_CUSTOMER, ...$this->tagIds],
         );
-    }
-
-    /**
-     * @param list<int> $revenueStatusIds
-     */
-    private function applyTotalSpentRange(CustomerQuery $query, array $revenueStatusIds): void
-    {
-        if ($this->minTotalSpent === null && $this->maxTotalSpent === null) {
-            return;
-        }
-
-        $expression = self::totalSpentSqlExpression(CustomerTableMap::COL_ID, $revenueStatusIds);
-
-        if ($this->minTotalSpent !== null) {
-            $query->where($expression.' >= ?', $this->minTotalSpent, \PDO::PARAM_STR);
-        }
-        if ($this->maxTotalSpent !== null) {
-            $query->where($expression.' <= ?', $this->maxTotalSpent, \PDO::PARAM_STR);
-        }
-    }
-
-    /**
-     * @param list<int> $revenueStatusIds
-     */
-    private function applyOrderCountRange(CustomerQuery $query, array $revenueStatusIds): void
-    {
-        if ($this->minOrderCount === null && $this->maxOrderCount === null) {
-            return;
-        }
-
-        $expression = self::orderCountSqlExpression(CustomerTableMap::COL_ID, $revenueStatusIds);
-
-        if ($this->minOrderCount !== null) {
-            $query->where($expression.' >= ?', $this->minOrderCount, \PDO::PARAM_INT);
-        }
-        if ($this->maxOrderCount !== null) {
-            $query->where($expression.' <= ?', $this->maxOrderCount, \PDO::PARAM_INT);
-        }
     }
 
     /**
