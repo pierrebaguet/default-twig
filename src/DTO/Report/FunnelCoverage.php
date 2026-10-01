@@ -36,13 +36,11 @@ final readonly class FunnelCoverage
 
     public static function resolve(DateRange $requested, CartPurgeHorizon $horizon, \DateTimeImmutable $now): self
     {
-        $truncated = $horizon->mayHavePurged($requested->from, $now);
-
         return new self(
             requestedFrom: $requested->from,
-            from: $truncated ? $horizon->earliestSurvivingCartDate($now) : $requested->from,
+            from: $horizon->boundedStart($requested->from, $now),
             to: $requested->to,
-            truncated: $truncated,
+            truncated: $horizon->mayHavePurged($requested->from, $now),
             retentionDays: $horizon->retentionDays(),
         );
     }
