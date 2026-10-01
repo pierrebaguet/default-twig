@@ -28,7 +28,9 @@
                 {% endif %}
             </h1>
             <div class="d-flex flex-wrap align-items-center gap-2" data-testid="customer-edit-actions">
-                {% if not customer.isGuest and is_granted('UPDATE', 'admin.customer') %}
+                {# No button where the link would be refused: a guest has no password, an anonymized customer no mailbox. #}
+                {% set anonymized_domain = '@' ~ constant('Thelia\\Domain\\Customer\\Service\\CustomerAnonymizer::ANONYMIZED_EMAIL_DOMAIN') %}
+                {% if not customer.isGuest and customer.email is not empty and not (customer.email ends with anonymized_domain) and is_granted('UPDATE', 'admin.customer') %}
                     <form method="post" action="{{ path('admin.customer.password_reset_link') }}" class="d-inline" data-testid="customer-password-reset-form">
                         <input type="hidden" name="customer_id" value="{{ customer.id }}">
                         <input type="hidden" name="_token" value="{{ assignToken() }}">

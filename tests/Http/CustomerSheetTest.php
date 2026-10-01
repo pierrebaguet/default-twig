@@ -23,6 +23,7 @@ use Thelia\Core\Event\Hook\HookRenderEvent;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Core\Template\TemplateDefinition;
+use Thelia\Domain\Customer\Service\CustomerAnonymizer;
 use Thelia\Model\Admin;
 use Thelia\Model\AdminLogQuery;
 use Thelia\Model\Config;
@@ -304,6 +305,22 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         self::assertNotSame('', $token);
         $this->givenAStoreEmail();
         $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $guest->getId(), '_token' => $token]);
+
+        self::assertCount(0, self::getMailerMessages());
+        self::assertCount(1, $this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]'));
+    }
+
+    public function testAnAnonymizedCustomerHasNoResetButtonAndGetsNoLink(): void
+    {
+        $customer = $this->customer();
+        $customer->setEmail(\sprintf('anonymous-%d@%s', $customer->getId(), CustomerAnonymizer::ANONYMIZED_EMAIL_DOMAIN))->save($this->getPropelConnection());
+        $crawler = $this->sheet($customer, $this->factory->admin());
+
+        self::assertCount(0, $crawler->filter('[data-testid="customer-password-reset-button"]'), 'Nobody reads the mailbox of an anonymized customer.');
+
+        $token = (string) $crawler->filter('meta[name="bo-token"]')->attr('content');
+        $this->givenAStoreEmail();
+        $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $customer->getId(), '_token' => $token]);
 
         self::assertCount(0, self::getMailerMessages());
         self::assertCount(1, $this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]'));

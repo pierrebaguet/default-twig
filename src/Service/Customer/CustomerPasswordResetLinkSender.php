@@ -16,6 +16,7 @@ namespace BackOfficeDefaultTwigBundle\Service\Customer;
 
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use Thelia\Domain\Customer\Service\CustomerAnonymizer;
 use Thelia\Domain\Customer\Service\PasswordResetService;
 use Thelia\Mailer\Exception\EmailNotSentException;
 use Thelia\Mailer\MailerFactory;
@@ -54,6 +55,10 @@ final readonly class CustomerPasswordResetLinkSender
 
         if ((string) $customer->getEmail() === '') {
             throw new PasswordResetLinkRefused('This customer has no email address.');
+        }
+
+        if (str_ends_with((string) $customer->getEmail(), '@'.CustomerAnonymizer::ANONYMIZED_EMAIL_DOMAIN)) {
+            throw new PasswordResetLinkRefused('This customer was anonymized: there is nobody to send a link to.');
         }
 
         if (!$this->limiter->create('customer-'.$customer->getId())->consume()->isAccepted()) {
