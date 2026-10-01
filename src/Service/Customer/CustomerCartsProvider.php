@@ -37,7 +37,7 @@ use Thelia\Model\CurrencyQuery;
  */
 final readonly class CustomerCartsProvider
 {
-    /** Same key and default as the core cart purge (CartPurgeHorizon). */
+    /** Same key and default as the core cart purge, `maintenance:purge` (Thelia\Command\MaintenancePurgeCommand). */
     public const CART_NO_ORDER_DAYS_CONFIG_KEY = 'purification_cart_no_order_days';
     public const DEFAULT_CART_NO_ORDER_DAYS = 60;
 
