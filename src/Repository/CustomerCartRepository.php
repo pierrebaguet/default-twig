@@ -29,16 +29,40 @@ use Propel\Runtime\Propel;
 final readonly class CustomerCartRepository
 {
     /**
+     * The customer's cart with at least one line and no order, created on or after
+     * $createdSince and active on or after $activeSince: the most recently active one.
+     *
+     * @return array{id: int, currency_id: ?int, created_at: \DateTimeImmutable, last_activity_at: \DateTimeImmutable, line_count: int, quantity: float, amount: float}|null
+     */
+    public function findCurrentCart(int $customerId, \DateTimeImmutable $createdSince, \DateTimeImmutable $activeSince): ?array
+    {
+        return $this->findUnconvertedCarts($customerId, $createdSince, 'last_activity_at >= :active', $activeSince, 1)[0] ?? null;
+    }
+
+    /**
      * The customer's carts with at least one line and no order, created on or after
-     * $createdSince, the most recently active first. A cart's last activity is the later
-     * of its own update and its lines' updates: adding a line does not touch the cart row.
+     * $createdSince and last active before $activeSince, the most recently active first.
      *
      * @return list<array{id: int, currency_id: ?int, created_at: \DateTimeImmutable, last_activity_at: \DateTimeImmutable, line_count: int, quantity: float, amount: float}>
      */
-    public function findUnconvertedCarts(int $customerId, \DateTimeImmutable $createdSince, int $limit): array
+    public function findAbandonedCarts(int $customerId, \DateTimeImmutable $createdSince, \DateTimeImmutable $activeSince, int $limit): array
+    {
+        return $this->findUnconvertedCarts($customerId, $createdSince, 'last_activity_at < :active', $activeSince, $limit);
+    }
+
+    /**
+     * A cart's last activity is the later of its own update and its lines' updates: adding
+     * a line does not touch the cart row. A missing date falls back on the creation date,
+     * as GREATEST() would otherwise answer NULL.
+     *
+     * @param 'last_activity_at >= :active'|'last_activity_at < :active' $activity
+     *
+     * @return list<array{id: int, currency_id: ?int, created_at: \DateTimeImmutable, last_activity_at: \DateTimeImmutable, line_count: int, quantity: float, amount: float}>
+     */
+    private function findUnconvertedCarts(int $customerId, \DateTimeImmutable $createdSince, string $activity, \DateTimeImmutable $activeSince, int $limit): array
     {
         $sql = 'SELECT c.id, c.currency_id, c.created_at,
-                GREATEST(COALESCE(c.updated_at, c.created_at), MAX(ci.updated_at)) AS last_activity_at,
+                GREATEST(COALESCE(c.updated_at, c.created_at), COALESCE(MAX(ci.updated_at), c.created_at)) AS last_activity_at,
                 COUNT(ci.id) AS line_count,
                 SUM(ci.quantity) AS quantity,
                 SUM(CASE WHEN ci.is_offered = 1 THEN 0 ELSE ci.quantity * CASE WHEN ci.promo = 1 THEN ci.promo_price ELSE ci.price END END) AS amount
@@ -48,11 +72,16 @@ final readonly class CustomerCartRepository
               AND c.created_at >= :since
               AND NOT EXISTS (SELECT 1 FROM `order` o WHERE o.cart_id = c.id)
             GROUP BY c.id, c.currency_id, c.created_at, c.updated_at
+            HAVING '.$activity.'
             ORDER BY last_activity_at DESC, c.id DESC
             LIMIT '.max(1, $limit);
 
         $statement = Propel::getConnection()->prepare($sql);
-        $statement->execute([':customer' => $customerId, ':since' => $createdSince->format('Y-m-d H:i:s')]);
+        $statement->execute([
+            ':customer' => $customerId,
+            ':since' => $createdSince->format('Y-m-d H:i:s'),
+            ':active' => $activeSince->format('Y-m-d H:i:s'),
+        ]);
 
         $carts = [];
         while (($row = $statement->fetch(\PDO::FETCH_ASSOC)) !== false) {

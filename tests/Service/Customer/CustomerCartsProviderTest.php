@@ -22,6 +22,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Thelia\Model\Cart;
 use Thelia\Model\CartQuery;
 use Thelia\Model\ConfigQuery;
+use Thelia\Model\Currency;
 use Thelia\Model\Customer;
 use Thelia\Model\Product;
 use Thelia\Test\FixtureFactory;
@@ -192,6 +193,111 @@ final class CustomerCartsProviderTest extends IntegrationTestCase
         self::assertSame((int) $cart->getId(), $carts->current->id);
     }
 
+    public function testACartIsCurrentUpToADayOfInactivityAndAbandonedPastIt(): void
+    {
+        $customer = $this->customer();
+        $current = $this->filledCart($customer);
+        $this->age($current, '-23 hours -59 minutes');
+        $abandoned = $this->filledCart($customer);
+        $this->age($abandoned, '-24 hours -1 minute');
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertSame((int) $current->getId(), $carts->current?->id);
+        self::assertSame([(int) $abandoned->getId()], $this->ids($carts->abandoned));
+    }
+
+    public function testACartCreatedJustInsideThePurgeHorizonIsListedAndJustOutsideIsNot(): void
+    {
+        $customer = $this->customer();
+        $inside = $this->filledCart($customer);
+        $this->age($inside, '-60 days +1 minute');
+        $outside = $this->filledCart($customer);
+        $this->age($outside, '-60 days -1 minute');
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertSame([(int) $inside->getId()], $this->ids($carts->abandoned));
+    }
+
+    public function testPastTwentyAbandonedCartsTheListSaysSomeAreLeftOut(): void
+    {
+        $customer = $this->customer();
+        for ($i = 0; $i < 20; ++$i) {
+            $this->age($this->filledCart($customer), '-'.(2 + $i).' days');
+        }
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+        self::assertCount(20, $carts->abandoned);
+        self::assertFalse($carts->moreAbandoned, 'Twenty carts, all of them shown.');
+
+        $oldest = $this->filledCart($customer);
+        $this->age($oldest, '-30 days');
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+        self::assertCount(20, $carts->abandoned);
+        self::assertTrue($carts->moreAbandoned, 'The twenty-first is left out, and the list says so.');
+        self::assertNotContains((int) $oldest->getId(), $this->ids($carts->abandoned), 'The oldest is the one left out.');
+    }
+
+    public function testTheCopyOfTheCurrentCartIsNeitherCurrentNorAbandonedNorTakesASlot(): void
+    {
+        $customer = $this->customer();
+        $copy = $this->filledCart($customer);
+        $this->age($copy, '-2 hours');
+        $current = $this->filledCart($customer);
+        $this->age($current, '-1 hour');
+        for ($i = 0; $i < 20; ++$i) {
+            $this->age($this->filledCart($customer), '-'.(2 + $i).' days');
+        }
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertSame((int) $current->getId(), $carts->current?->id, 'The most recently active cart is the current one.');
+        self::assertNotContains((int) $copy->getId(), $this->ids($carts->abandoned));
+        self::assertCount(20, $carts->abandoned, 'The copy does not push an abandoned cart out of the list.');
+        self::assertFalse($carts->moreAbandoned);
+    }
+
+    public function testTheCartsOfAnotherCustomerAreNotListed(): void
+    {
+        $customer = $this->customer();
+        $this->age($this->filledCart($this->customer()), '-3 days');
+        $this->filledCart($this->customer());
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertNull($carts->current);
+        self::assertSame([], $carts->abandoned);
+    }
+
+    public function testACartWhoseLinesHaveNoUpdateDateIsDatedByTheCart(): void
+    {
+        $customer = $this->customer();
+        $cart = $this->filledCart($customer);
+        $this->age($cart, '-10 days');
+        $this->getPropelConnection()->prepare('UPDATE cart_item SET updated_at = NULL WHERE cart_id = ?')->execute([$cart->getId()]);
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertNull($carts->current, 'A line with no date does not make the cart current.');
+        self::assertSame([(int) $cart->getId()], $this->ids($carts->abandoned));
+        self::assertSame($this->now->modify('-10 days')->format('Y-m-d'), $carts->abandoned[0]->lastActivityAt->format('Y-m-d'));
+    }
+
+    public function testACartWithoutCurrencyIsShownInTheShopCurrency(): void
+    {
+        $customer = $this->customer();
+        $cart = $this->filledCart($customer);
+        $this->age($cart, '-3 days');
+        $this->getPropelConnection()->prepare('UPDATE cart SET currency_id = NULL WHERE id = ?')->execute([$cart->getId()]);
+
+        $carts = $this->provider->compute((int) $customer->getId(), 'en_US', $this->now);
+
+        self::assertCount(1, $carts->abandoned);
+        self::assertSame((string) Currency::getDefaultCurrency()->getSymbol(), $carts->abandoned[0]->currencySymbol);
+    }
+
     public function testTheSectionCostsAFixedNumberOfQueries(): void
     {
         $customer = $this->customer();
@@ -208,6 +314,16 @@ final class CustomerCartsProviderTest extends IntegrationTestCase
         });
 
         self::assertLessThanOrEqual(5, $queries, 'The carts, the lines of the current one, the currencies: not one query per cart or per line.');
+    }
+
+    /**
+     * @param list<CustomerCart> $carts
+     *
+     * @return list<int>
+     */
+    private function ids(array $carts): array
+    {
+        return array_map(static fn (CustomerCart $cart): int => $cart->id, $carts);
     }
 
     private function customer(): Customer

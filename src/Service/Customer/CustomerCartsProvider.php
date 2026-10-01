@@ -53,41 +53,42 @@ final readonly class CustomerCartsProvider
     public function compute(int $customerId, string $locale, \DateTimeImmutable $now): CustomerCarts
     {
         $horizonDays = max(1, (int) ConfigQuery::read(self::CART_NO_ORDER_DAYS_CONFIG_KEY, self::DEFAULT_CART_NO_ORDER_DAYS));
-        $rows = $this->carts->findUnconvertedCarts(
-            $customerId,
-            $now->modify('-'.$horizonDays.' days'),
-            self::MAX_ABANDONED + 1,
-        );
+        $createdSince = $now->modify('-'.$horizonDays.' days');
+        $activeSince = $now->sub(new \DateInterval(self::CURRENT_CART_WINDOW));
 
-        $currentFrom = $now->sub(new \DateInterval(self::CURRENT_CART_WINDOW));
-        $symbols = $this->currencySymbols($rows);
+        $currentRow = $this->carts->findCurrentCart($customerId, $createdSince, $activeSince);
+        // One more than shown, to tell whether some are left out.
+        $abandonedRows = $this->carts->findAbandonedCarts($customerId, $createdSince, $activeSince, self::MAX_ABANDONED + 1);
+        $symbols = $this->currencySymbols($currentRow !== null ? [$currentRow, ...$abandonedRows] : $abandonedRows);
 
-        $current = null;
-        $abandoned = [];
-        foreach ($rows as $row) {
-            $cart = new CustomerCart(
-                id: $row['id'],
-                createdAt: $row['created_at'],
-                lastActivityAt: $row['last_activity_at'],
-                lineCount: $row['line_count'],
-                quantity: $row['quantity'],
-                amount: $row['amount'],
-                currencySymbol: $symbols[$row['currency_id'] ?? 0] ?? $symbols[0],
-            );
-
-            if ($row['last_activity_at'] >= $currentFrom) {
-                $current ??= $cart;
-                continue;
-            }
-
-            $abandoned[] = $cart;
-        }
+        $current = $currentRow !== null ? $this->cart($currentRow, $symbols) : null;
 
         return new CustomerCarts(
             current: $current,
             currentLines: $current !== null ? $this->lines($current->id, $locale) : [],
-            abandoned: \array_slice($abandoned, 0, self::MAX_ABANDONED),
+            abandoned: array_map(
+                fn (array $row): CustomerCart => $this->cart($row, $symbols),
+                \array_slice($abandonedRows, 0, self::MAX_ABANDONED),
+            ),
             horizonDays: $horizonDays,
+            moreAbandoned: \count($abandonedRows) > self::MAX_ABANDONED,
+        );
+    }
+
+    /**
+     * @param array{id: int, currency_id: ?int, created_at: \DateTimeImmutable, last_activity_at: \DateTimeImmutable, line_count: int, quantity: float, amount: float} $row
+     * @param array<int, string>                                                                                                                                       $symbols
+     */
+    private function cart(array $row, array $symbols): CustomerCart
+    {
+        return new CustomerCart(
+            id: $row['id'],
+            createdAt: $row['created_at'],
+            lastActivityAt: $row['last_activity_at'],
+            lineCount: $row['line_count'],
+            quantity: $row['quantity'],
+            amount: $row['amount'],
+            currencySymbol: $symbols[$row['currency_id'] ?? 0] ?? $symbols[0],
         );
     }
 
