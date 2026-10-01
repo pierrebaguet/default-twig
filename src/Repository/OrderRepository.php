@@ -705,17 +705,32 @@ final class OrderRepository
     }
 
     /**
-     * The same ids as a SQL list, for the two dashboard queries written in raw SQL. Every
-     * value comes from a primary key read back from the database and is cast to an integer
-     * here; an empty list becomes `0`, which no primary key matches.
+     * The revenue status ids as a SQL list, for the customer queries written in raw SQL.
+     */
+    public function revenueStatusIdListSql(): string
+    {
+        return $this->statusIdListSql(self::REVENUE_STATUS_CODES);
+    }
+
+    /**
+     * Status ids as a SQL list. Every value is an integer by signature; an empty list
+     * becomes `0`, which no primary key matches.
+     *
+     * @param list<int> $statusIds
+     */
+    public static function idListSql(array $statusIds): string
+    {
+        return [] === $statusIds ? '0' : implode(', ', array_map(static fn (int $id): string => (string) $id, $statusIds));
+    }
+
+    /**
+     * The ids of the statuses answering for these codes, as a SQL list.
      *
      * @param list<string> $codes
      */
     private function statusIdListSql(array $codes): string
     {
-        $ids = $this->statusIdsAnsweringFor($codes);
-
-        return [] === $ids ? '0' : implode(', ', $ids);
+        return self::idListSql($this->statusIdsAnsweringFor($codes));
     }
 
     private function buildFilteredQuery(OrderFilters $filters): OrderQuery

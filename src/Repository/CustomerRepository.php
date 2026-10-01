@@ -123,7 +123,7 @@ final readonly class CustomerRepository
                 SELECT customer_id, '.OrderFilters::totalAmountSqlExpression().' AS computed
                 FROM `order`
                 WHERE customer_id IN ('.$placeholders.')
-                  AND status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
+                  AND status_id IN ('.$this->orders->revenueStatusIdListSql().')
             ) AS sub
             GROUP BY customer_id';
 
@@ -156,7 +156,7 @@ final readonly class CustomerRepository
         $sql = 'SELECT customer_id, COUNT(*) AS total
             FROM `order`
             WHERE customer_id IN ('.$placeholders.')
-              AND status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
+              AND status_id IN ('.$this->orders->revenueStatusIdListSql().')
             GROUP BY customer_id';
 
         $statement = Propel::getConnection()->prepare($sql);
@@ -335,7 +335,7 @@ final readonly class CustomerRepository
             FROM (
                 SELECT customer_id, '.OrderFilters::totalAmountSqlExpression().' AS computed
                 FROM `order`
-                WHERE status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
+                WHERE status_id IN ('.$this->orders->revenueStatusIdListSql().')
             ) AS per_order
             GROUP BY customer_id
         ) AS sub';
@@ -358,7 +358,7 @@ final readonly class CustomerRepository
     {
         $sql = 'SELECT MAX(cnt) AS max_val FROM (
             SELECT COUNT(*) AS cnt FROM `order`
-            WHERE status_id IN ('.CustomerFilters::statusIdListSql($this->orders->revenueStatusIds()).')
+            WHERE status_id IN ('.$this->orders->revenueStatusIdListSql().')
             GROUP BY customer_id
         ) AS sub';
 

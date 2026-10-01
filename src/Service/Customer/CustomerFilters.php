@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Service\Customer;
 
+use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Order\OrderFilters;
 use Propel\Runtime\ActiveQuery\Criteria;
 use Symfony\Component\HttpFoundation\Request;
@@ -293,7 +294,7 @@ final readonly class CustomerFilters
     {
         return '(SELECT COALESCE(SUM('.OrderFilters::totalAmountSqlExpression().'), 0) FROM `order`'
             .' WHERE `order`.customer_id = '.$customerIdColumn
-            .' AND `order`.status_id IN ('.self::statusIdListSql($revenueStatusIds).'))';
+            .' AND `order`.status_id IN ('.OrderRepository::idListSql($revenueStatusIds).'))';
     }
 
     /**
@@ -307,18 +308,7 @@ final readonly class CustomerFilters
     public static function orderCountSqlExpression(string $customerIdColumn, array $revenueStatusIds): string
     {
         return '(SELECT COUNT(*) FROM `order` WHERE `order`.customer_id = '.$customerIdColumn
-            .' AND `order`.status_id IN ('.self::statusIdListSql($revenueStatusIds).'))';
-    }
-
-    /**
-     * Status ids as a SQL list. Every value is an integer by signature; an empty list
-     * becomes `0`, which no primary key matches.
-     *
-     * @param list<int> $statusIds
-     */
-    public static function statusIdListSql(array $statusIds): string
-    {
-        return $statusIds === [] ? '0' : implode(', ', array_map(static fn (int $id): string => (string) $id, $statusIds));
+            .' AND `order`.status_id IN ('.OrderRepository::idListSql($revenueStatusIds).'))';
     }
 
     /**
