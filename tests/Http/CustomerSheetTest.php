@@ -298,9 +298,8 @@ final class CustomerSheetTest extends WebIntegrationTestCase
 
         self::assertCount(0, $crawler->filter('[data-testid="customer-password-reset-button"]'));
 
-        // The session token, as the personal data export link carries it.
-        parse_str((string) parse_url((string) $crawler->filter('[data-testid="customer-personal-data-export"]')->attr('href'), \PHP_URL_QUERY), $query);
-        $token = (string) ($query['_token'] ?? '');
+        // The session token, as the scripts of the page read it.
+        $token = (string) $crawler->filter('meta[name="bo-token"]')->attr('content');
         self::assertNotSame('', $token);
         $this->givenAStoreEmail();
         $this->client->request('POST', '/admin/customer/password-reset-link', ['customer_id' => $guest->getId(), '_token' => $token]);

@@ -159,6 +159,7 @@ final class TokenNeverInUrlTest extends WebIntegrationTestCase
         $content = $factory->content($folder);
         $customer = $factory->customer($factory->customerTitle());
         $order = $factory->order($customer);
+        $factory->cartItem($factory->cart($customer), $product, $pse);
         $coupon = $factory->coupon();
         $factory->sale();
         $factory->catalogPriceRule();
@@ -203,6 +204,7 @@ final class TokenNeverInUrlTest extends WebIntegrationTestCase
             '/admin/coupon/update/'.$coupon->getId(),
             '/admin/customers',
             '/admin/customer/update?customer_id='.$customer->getId(),
+            '/admin/customer/carts?customer_id='.$customer->getId(),
             '/admin/folders',
             '/admin/folders?folder_id='.$folder->getId(),
             '/admin/content/update/'.$content->getId(),
