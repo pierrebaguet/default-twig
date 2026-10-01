@@ -18,6 +18,7 @@ use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionReport;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionStepView;
 use BackOfficeDefaultTwigBundle\DTO\Report\FunnelCoverage;
+use BackOfficeDefaultTwigBundle\Repository\DataTransferRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -28,8 +29,6 @@ use Thelia\Domain\Cart\Service\CartPurgeHorizon;
 use Thelia\Domain\Report\ConversionFunnel\ConversionFunnel;
 use Thelia\Domain\Report\ConversionFunnel\ConversionFunnelCalculator;
 use Thelia\Domain\Report\ConversionFunnel\FunnelStep;
-use Thelia\Model\Export;
-use Thelia\Model\ExportQuery;
 
 /**
  * The "Reports > Conversion" screen: the checkout funnel of the period, and the
@@ -70,6 +69,7 @@ final readonly class ConversionReportProvider
 
     public function __construct(
         private ConversionFunnelCalculator $calculator,
+        private DataTransferRepository $dataTransfers,
         private PeriodOptions $periodOptions,
         private SearchLogReportBuilder $searchLogReportBuilder,
         private SecurityContext $securityContext,
@@ -144,13 +144,9 @@ final readonly class ConversionReportProvider
             return null;
         }
 
-        $export = ExportQuery::create()->findOneByRef(self::EXPORT_REF);
+        $exportId = $this->dataTransfers->findExportIdByRef(self::EXPORT_REF);
 
-        if (!$export instanceof Export) {
-            return null;
-        }
-
-        return $this->urls->generate('export.view', ['id' => $export->getId()]);
+        return null === $exportId ? null : $this->urls->generate('export.view', ['id' => $exportId]);
     }
 
     private function canView(string $resource): bool

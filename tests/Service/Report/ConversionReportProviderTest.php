@@ -17,6 +17,7 @@ namespace BackOfficeDefaultTwigBundle\Tests\Service\Report;
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionStepView;
 use BackOfficeDefaultTwigBundle\DTO\Report\SearchLogAvailability;
+use BackOfficeDefaultTwigBundle\Repository\DataTransferRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
 use BackOfficeDefaultTwigBundle\Service\Report\ConversionReportProvider;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\NullSearchLogReader;
@@ -190,6 +191,7 @@ final class ConversionReportProviderTest extends IntegrationTestCase
 
         return new ConversionReportProvider(
             new ConversionFunnelCalculator(),
+            $this->getService(DataTransferRepository::class),
             $this->periodOptions(),
             new SearchLogReportBuilder(new NullSearchLogReader(SearchLogAvailability::ModuleMissing), $urls),
             $this->securityContext,

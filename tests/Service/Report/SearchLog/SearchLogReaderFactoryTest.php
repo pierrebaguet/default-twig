@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Service\Report\SearchLog;
 
 use BackOfficeDefaultTwigBundle\DTO\Report\SearchLogAvailability;
+use BackOfficeDefaultTwigBundle\Repository\ModuleRepository;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\NullSearchLogReader;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\SearchLogReaderFactory;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\TntSearchLogReader;
@@ -101,7 +102,7 @@ final class SearchLogReaderFactoryTest extends IntegrationTestCase
 
     private function factory(): SearchLogReaderFactory
     {
-        return new SearchLogReaderFactory($this->probe());
+        return new SearchLogReaderFactory(new ModuleRepository(), $this->probe());
     }
 
     private function probe(): TntSearchSchemaProbe

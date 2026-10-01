@@ -31,6 +31,13 @@ final readonly class DataTransferRepository
     ) {
     }
 
+    public function findExportIdByRef(string $ref): ?int
+    {
+        $export = ExportQuery::create()->findOneByRef($ref);
+
+        return null === $export ? null : (int) $export->getId();
+    }
+
     /**
      * @return list<array{id: int, title: string, exports: list<array{id: int, ref: string, title: string, description: string, position: int}>}>
      */

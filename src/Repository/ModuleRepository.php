@@ -37,6 +37,11 @@ final class ModuleRepository
     /** @var array<string, array<int, ?string>> */
     private array $titles = [];
 
+    public function findOneByCode(string $code): ?Module
+    {
+        return ModuleQuery::create()->findOneByCode($code);
+    }
+
     /**
      * @return ObjectCollection<int, Module>
      */

@@ -15,20 +15,22 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Report\SearchLog;
 
 use BackOfficeDefaultTwigBundle\DTO\Report\SearchLogAvailability;
+use BackOfficeDefaultTwigBundle\Repository\ModuleRepository;
 use Propel\Runtime\Propel;
-use Thelia\Model\ModuleQuery;
 
 final readonly class SearchLogReaderFactory
 {
     private const MODULE_CODE = 'TntSearch';
 
-    public function __construct(private TntSearchSchemaProbe $probe)
-    {
+    public function __construct(
+        private ModuleRepository $modules,
+        private TntSearchSchemaProbe $probe,
+    ) {
     }
 
     public function create(): SearchLogReader
     {
-        $module = ModuleQuery::create()->findOneByCode(self::MODULE_CODE);
+        $module = $this->modules->findOneByCode(self::MODULE_CODE);
 
         if (null === $module) {
             return new NullSearchLogReader(SearchLogAvailability::ModuleMissing);
