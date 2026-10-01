@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Service\Customer;
 
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
+use BackOfficeDefaultTwigBundle\Repository\CustomerRepository;
 use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerOverviewProvider;
@@ -96,6 +97,32 @@ final class CustomerOverviewProviderTest extends IntegrationTestCase
         self::assertNotNull($kpis);
         self::assertEqualsWithDelta(73.0, $kpis->totalSpent, 0.001, '11 + 22 + 33 + 7 on a status answering for sent.');
         self::assertEqualsWithDelta($revenue, $kpis->totalSpent, 0.001, 'The sheet total is the dashboard revenue over the same orders.');
+    }
+
+    /**
+     * The customer list and the sheet show the same customer side by side: whatever mix of
+     * statuses the orders sit in, the order count and the total spent of the list row are
+     * the ones the sheet shows.
+     */
+    public function testTheSheetShowsTheOrderCountAndTotalOfTheCustomerList(): void
+    {
+        $customer = $this->customer();
+        $ownPaid = $this->factory->orderStatus(['equivalentCode' => OrderStatus::CODE_PAID]);
+        $day = 1;
+        foreach ([OrderStatus::CODE_PAID, OrderStatus::CODE_PROCESSING, OrderStatus::CODE_SENT, OrderStatus::CODE_NOT_PAID, OrderStatus::CODE_CANCELED, OrderStatus::CODE_REFUNDED] as $code) {
+            $this->order($customer, $code, (string) (10 * $day), \sprintf('2026-03-%02d 10:00:00', $day++));
+        }
+        $order = $this->order($customer, OrderStatus::CODE_NOT_PAID, '7', '2026-03-20 10:00:00');
+        $order->setStatusId($ownPaid->getId())->save($this->getPropelConnection());
+
+        $kpis = $this->provider(true)->compute($customer, $this->now)->kpis;
+        $list = new CustomerRepository(new OrderRepository());
+        $customerId = (int) $customer->getId();
+
+        self::assertNotNull($kpis);
+        self::assertSame(4, $kpis->orderCount, 'Paid, processing, sent, and the status answering for paid.');
+        self::assertSame($list->findOrderCounts([$customerId])[$customerId] ?? 0, $kpis->orderCount, 'The list counts the orders the sheet counts.');
+        self::assertEqualsWithDelta($list->findTotalSpentByCustomer([$customerId])[$customerId] ?? 0.0, $kpis->totalSpent, 0.001, 'The list adds up the orders the sheet adds up.');
     }
 
     public function testACustomerWithoutOrderHasFiguresAtZeroAndNoAverage(): void
