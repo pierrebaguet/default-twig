@@ -18,6 +18,7 @@ use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\ConversionStepView;
 use BackOfficeDefaultTwigBundle\DTO\Report\SearchLogAvailability;
 use BackOfficeDefaultTwigBundle\Repository\DataTransferRepository;
+use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
 use BackOfficeDefaultTwigBundle\Service\Report\ConversionReportProvider;
 use BackOfficeDefaultTwigBundle\Service\Report\SearchLog\NullSearchLogReader;
@@ -32,6 +33,8 @@ use Thelia\Domain\Cart\Service\CartPurgeHorizon;
 use Thelia\Domain\Cart\Service\CartPurger;
 use Thelia\Domain\Report\ConversionFunnel\ConversionFunnelCalculator;
 use Thelia\Model\CartQuery;
+use Thelia\Model\ConfigQuery;
+use Thelia\Model\OrderStatus;
 use Thelia\Test\IntegrationTestCase;
 
 final class ConversionReportProviderTest extends IntegrationTestCase
@@ -59,6 +62,7 @@ final class ConversionReportProviderTest extends IntegrationTestCase
     protected function tearDown(): void
     {
         $this->securityContext->clearAdminUser();
+        ConfigQuery::resetCache();
 
         parent::tearDown();
     }
@@ -149,6 +153,34 @@ final class ConversionReportProviderTest extends IntegrationTestCase
         self::assertSame($horizon->retentionDays(), $coverage->retentionDays);
     }
 
+    public function testTheOrdersPlacedAreTheOrdersOfTheDashboardOnTheSamePeriod(): void
+    {
+        $range = DateRange::fromPreset(DateRange::PRESET_SEVEN_DAYS);
+        $factory = $this->createFixtureFactory();
+        $factory->order();
+        $factory->order(null, ['statusCode' => OrderStatus::CODE_PAID]);
+        $factory->order(null, ['statusCode' => OrderStatus::CODE_CANCELED]);
+
+        $report = $this->provider()->compute($range, self::LOCALE);
+
+        self::assertFalse($report->coverage->truncated, 'Precondition: seven days stay within the purge horizon.');
+        self::assertSame(
+            $this->getService(OrderRepository::class)->countOrders($range),
+            $this->stepCount($report->steps, 'orders_created'),
+        );
+    }
+
+    public function testANegativeCartRetentionDoesNotBreakTheScreen(): void
+    {
+        ConfigQuery::write(CartPurgeHorizon::CONFIG_KEY_CART_NO_ORDER_DAYS, '-5');
+
+        $range = DateRange::fromPreset(DateRange::PRESET_THIRTY_DAYS);
+        $coverage = $this->provider()->compute($range, self::LOCALE)->coverage;
+
+        self::assertTrue($coverage->truncated, 'The purge deletes every cart without order: the funnel starts now.');
+        self::assertSame(0, $coverage->retentionDays);
+    }
+
     public function testThePeriodPillsKeepTheSearchesTabOpen(): void
     {
         $this->securityContext->setAdminUser($this->createFixtureFactory()->admin());
@@ -198,6 +230,20 @@ final class ConversionReportProviderTest extends IntegrationTestCase
             $this->getService(TranslatorInterface::class),
             $urls,
         );
+    }
+
+    /**
+     * @param list<ConversionStepView> $steps
+     */
+    private function stepCount(array $steps, string $key): int
+    {
+        foreach ($steps as $step) {
+            if ($key === $step->key) {
+                return $step->count;
+            }
+        }
+
+        self::fail("Step $key is missing from the report.");
     }
 
     private function periodOptions(): PeriodOptions
