@@ -128,7 +128,7 @@ final class CombinationsTabContextBuilderTest extends IntegrationTestCase
      */
     private function orderedIds(array $createdIds): array
     {
-        $context = new CombinationsTabContextBuilder()->build($this->product);
+        $context = (new CombinationsTabContextBuilder())->build($this->product);
 
         return array_values(array_filter(
             array_map(static fn (array $row): int => $row['id'], $context['pse_rows']),
