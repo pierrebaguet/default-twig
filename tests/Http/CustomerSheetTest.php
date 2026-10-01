@@ -16,6 +16,7 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use BackOfficeDefaultTwigBundle\Tests\Support\QueryCounter;
 use Symfony\Component\DomCrawler\Crawler;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Core\Event\Hook\HookRenderBlockEvent;
 use Thelia\Core\Event\Hook\HookRenderEvent;
@@ -404,7 +405,15 @@ final class CustomerSheetTest extends WebIntegrationTestCase
 
     private function customer(): Customer
     {
-        return $this->factory->customer($this->factory->customerTitle());
+        $customer = $this->factory->customer($this->factory->customerTitle());
+
+        // The quota of reset links lives in the cache pool, which outlives the test database:
+        // a rebuilt database hands out the same ids again, and this one may find its quota spent.
+        $limiter = $this->getService('limiter.admin_customer_password_reset');
+        \assert($limiter instanceof RateLimiterFactoryInterface);
+        $limiter->create('customer-'.$customer->getId())->reset();
+
+        return $customer;
     }
 
     private function product(string $title): Product
