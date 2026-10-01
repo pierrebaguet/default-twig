@@ -84,7 +84,10 @@ final readonly class CustomerPasswordResetController
 
             return $back;
         } catch (EmailNotSentException $exception) {
-            $this->logger->error('The password reset link could not be sent', ['exception' => $exception, 'customer_id' => $customerId]);
+            // The message names the mail and the kind of failure only. The raw reason names the
+            // recipient and may hold transport details: the mailer already logs it, stripped
+            // of credentials.
+            $this->logger->error('The password reset link could not be sent', ['reason' => $exception->getMessage(), 'customer_id' => $customerId]);
             $this->flash($request, 'danger', $this->translator->trans('The password reset link could not be sent: check the mail settings of the shop.'));
 
             return $back;
