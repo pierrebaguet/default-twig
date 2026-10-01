@@ -2282,7 +2282,6 @@ return [
     'The shop maintenance deletes the carts without order after %days% days: older carts cannot be shown.' => 'La maintenance de la boutique supprime les paniers sans commande après %days% jours : les paniers plus anciens ne peuvent pas être affichés.',
     'This customer does not exist.' => 'Ce client n\'existe pas.',
     'Overview' => 'Vue d\'ensemble',
-    'Carts' => 'Paniers',
     'Unable to load this section.' => 'Impossible de charger cette section.',
     'Send a password reset link' => 'Envoyer un lien de réinitialisation du mot de passe',
     'A password reset link was sent to %email%.' => 'Un lien de réinitialisation du mot de passe a été envoyé à %email%.',
