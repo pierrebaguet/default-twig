@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Controller\Configuration;
 
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
+use BackOfficeDefaultTwigBundle\Service\Configuration\DeliveryModuleTrackingUrl;
 use BackOfficeDefaultTwigBundle\Service\I18n\CountryStateProvider;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -22,6 +23,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Core\Event\ShippingZone\ShippingZoneAddAreaEvent;
 use Thelia\Core\Event\ShippingZone\ShippingZoneRemoveAreaEvent;
 use Thelia\Core\Event\TheliaEvents;
@@ -52,6 +54,8 @@ final class ShippingZoneController
         private readonly EventDispatcherInterface $events,
         private readonly TokenProvider $tokens,
         private readonly CountryStateProvider $countryStates,
+        private readonly DeliveryModuleTrackingUrl $trackingUrl,
+        private readonly TranslatorInterface $translator,
     ) {
     }
 
@@ -113,7 +117,41 @@ final class ShippingZoneController
             'delivery_module_id' => $delivery_module_id,
             'associated_areas' => $associated,
             'available_areas' => $availableAreas,
+            'tracking' => [
+                'supported' => $this->trackingUrl->isSupported(),
+                'provided_by_module' => $this->trackingUrl->isProvidedByModule($delivery_module_id),
+                'template' => $this->trackingUrl->templateOf($delivery_module_id),
+            ],
         ]));
+    }
+
+    /**
+     * The tracking address template of the module, where %ID% stands for the tracking
+     * number of an order. Empty removes it; anything but an http(s) address carrying
+     * %ID% is refused, since it ends up as a link in front of the customer.
+     */
+    #[Route('/tracking-url', name: 'tracking-url.update', methods: ['POST'])]
+    public function updateTrackingUrl(Request $request): Response
+    {
+        if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
+            return $denied;
+        }
+
+        $this->tokens->checkToken((string) $request->request->get('_token'));
+
+        $deliveryModuleId = (int) $request->request->get('delivery_module_id', 0);
+
+        if ($deliveryModuleId === 0) {
+            return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
+        }
+
+        if ($this->trackingUrl->save($deliveryModuleId, (string) $request->request->get('tracking_url', ''))) {
+            $this->flash($request, 'success', $this->translator->trans('The tracking address has been saved.'));
+        } else {
+            $this->flash($request, 'danger', $this->translator->trans('The tracking address must start with http:// or https:// and contain %ID%, which is replaced by the tracking number.'));
+        }
+
+        return new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['delivery_module_id' => $deliveryModuleId]));
     }
 
     #[Route('/area/add', name: 'area.add', methods: ['POST'])]
@@ -275,5 +313,14 @@ final class ShippingZoneController
         $defaultLang = LangQuery::create()->findOneByByDefault(1);
 
         return $defaultLang?->getLocale() ?? 'en_US';
+    }
+
+    private function flash(Request $request, string $type, string $message): void
+    {
+        $session = $request->hasSession() ? $request->getSession() : null;
+
+        if ($session !== null && method_exists($session, 'getFlashBag')) {
+            $session->getFlashBag()->add($type, $message);
+        }
     }
 }
