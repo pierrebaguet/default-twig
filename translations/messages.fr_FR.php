@@ -2385,4 +2385,13 @@ return [
     'The GTIN %code% of the combination %ref% is also carried by: %others%. It was saved; check it is not a typing mistake.' => 'Le GTIN %code% de la combinaison %ref% est aussi porté par : %others%. Il a été enregistré ; vérifiez qu\'il ne s\'agit pas d\'une erreur de saisie.',
     'Title, reference, GTIN or manufacturer part number' => 'Titre, référence, GTIN ou référence fabricant',
     'Not saved until a price is entered: %references%.' => 'Non enregistré tant qu\'aucun prix n\'est saisi : %references%.',
+    'Track the parcel on the carrier site' => 'Suivre le colis sur le site du transporteur',
+    'Parcel tracking' => 'Suivi des colis',
+    'Tracking address' => 'Adresse de suivi',
+    '%ID% is replaced by the tracking number of the order. Leave empty when the carrier has no tracking page.' => '%ID% est remplacé par le numéro de suivi de la commande. Laissez vide si le transporteur n\'a pas de page de suivi.',
+    'This module builds the tracking link of its parcels itself.' => 'Ce module construit lui-même le lien de suivi de ses colis.',
+    'The tracking address has been saved.' => 'L\'adresse de suivi a été enregistrée.',
+    'The tracking address must start with http:// or https:// and contain %ID%, which is replaced by the tracking number.' => 'L\'adresse de suivi doit commencer par http:// ou https:// et contenir %ID%, remplacé par le numéro de suivi.',
+    'Send the customer an email when their order is shipped' => 'Envoyer un e-mail au client quand sa commande est expédiée',
+    'Sent when an order enters the "Sent" status, with the carrier, the tracking number and the tracking link. Turn it off when the customer is notified another way.' => 'Envoyé quand une commande passe au statut « Envoyée », avec le transporteur, le numéro et le lien de suivi. À désactiver si le client est prévenu autrement.',
 ];
