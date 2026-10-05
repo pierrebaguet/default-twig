@@ -14,16 +14,22 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
+use BackOfficeDefaultTwigBundle\Service\Configuration\DeliveryModuleTrackingUrl;
+use Propel\Runtime\ActiveQuery\Criteria;
+use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Thelia\Domain\Order\Service\OrderTrackingUrlResolver;
+use Thelia\Model\AdminLogQuery;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Module;
 use Thelia\Model\ModuleConfigQuery;
+use Thelia\Model\ModuleQuery;
 use Thelia\Model\Order;
 use Thelia\Module\BaseModule;
 use Thelia\Test\FixtureFactory;
 use Thelia\Test\WebIntegrationTestCase;
 use Thelia\Tests\Support\BackOffice\AdminSessionInjector;
+use Thelia\Tests\Support\Module\TrackingCarrierModule;
 
 /**
  * The merchant side of the parcel tracking link: the tracking address typed for a
@@ -150,6 +156,68 @@ final class ParcelTrackingBackOfficeTest extends WebIntegrationTestCase
         $this->submitTrackingUrl($carrier, '');
 
         self::assertSame(302, $this->client->getResponse()->getStatusCode());
+        self::assertNull($this->storedTemplateOf($carrier));
+    }
+
+    public function testATrackingAddressPostedWithoutTheFormTokenIsNotSaved(): void
+    {
+        $carrier = $this->carrier('https://carrier.example/%ID%');
+
+        $this->client->request('POST', '/admin/configuration/shipping_zones/tracking-url', [
+            '_token' => 'not-the-token',
+            'delivery_module_id' => $carrier->getId(),
+            'tracking_url' => 'https://attacker.example/%ID%',
+        ]);
+        ModuleConfigQuery::resetConfigCache();
+
+        self::assertSame('https://carrier.example/%ID%', $this->storedTemplateOf($carrier));
+    }
+
+    public function testATrackingAddressIsNotSavedOnAModuleThatIsNotACarrier(): void
+    {
+        $carrier = $this->carrier(null);
+        $paymentModule = ModuleQuery::create()->findOneByCode('Cheque');
+        self::assertNotNull($paymentModule);
+
+        $crawler = $this->client->request('GET', '/admin/configuration/shipping_zones/update/'.$carrier->getId());
+        $form = $crawler->filter('[data-testid="shipping-zones-tracking-url-submit"]')->form([
+            'tracking_url' => 'https://carrier.example/%ID%',
+            'delivery_module_id' => (string) $paymentModule->getId(),
+        ]);
+        $this->client->submit($form);
+        ModuleConfigQuery::resetConfigCache();
+
+        self::assertNull(ModuleConfigQuery::create()->getConfigValue($paymentModule->getId(), OrderTrackingUrlResolver::TRACKING_URL_CONFIG_KEY));
+        $this->client->followRedirect();
+        self::assertCount(1, $this->client->getCrawler()->filter('[data-testid="bo-flash-danger"]'));
+    }
+
+    /**
+     * The address redirects the clicks of every customer of the carrier: who changed it
+     * is kept in the administration log.
+     */
+    public function testAChangedTrackingAddressIsLogged(): void
+    {
+        $carrier = $this->carrier(null);
+
+        $this->submitTrackingUrl($carrier, 'https://carrier.example/%ID%');
+
+        self::assertSame(1, AdminLogQuery::create()
+            ->filterByResourceId($carrier->getId())
+            ->filterByMessage('%Tracking address of delivery module%', Criteria::LIKE)
+            ->count());
+    }
+
+    public function testNoTemplateIsKeptForAModuleThatBuildsItsLinksItself(): void
+    {
+        $carrier = $this->carrier(null);
+        $container = new Container();
+        $container->set('module.'.self::CARRIER_CODE, new TrackingCarrierModule(self::CARRIER_CODE, 'https://signed.example/{ref}'));
+
+        $saved = (new DeliveryModuleTrackingUrl(new OrderTrackingUrlResolver($container)))->save($carrier->getId(), 'https://carrier.example/%ID%');
+        ModuleConfigQuery::resetConfigCache();
+
+        self::assertFalse($saved);
         self::assertNull($this->storedTemplateOf($carrier));
     }
 

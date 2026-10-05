@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Controller\Configuration;
 
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
+use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
 use BackOfficeDefaultTwigBundle\Service\Configuration\DeliveryModuleTrackingUrl;
 use BackOfficeDefaultTwigBundle\Service\I18n\CountryStateProvider;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -56,6 +57,7 @@ final class ShippingZoneController
         private readonly CountryStateProvider $countryStates,
         private readonly DeliveryModuleTrackingUrl $trackingUrl,
         private readonly TranslatorInterface $translator,
+        private readonly AdminLogger $adminLogger,
     ) {
     }
 
@@ -146,6 +148,8 @@ final class ShippingZoneController
         }
 
         if ($this->trackingUrl->save($deliveryModuleId, (string) $request->request->get('tracking_url', ''))) {
+            // The address ends up as a link in front of every customer of the carrier.
+            $this->adminLogger->log(self::RESOURCE, AccessManager::UPDATE, \sprintf('Tracking address of delivery module %d changed', $deliveryModuleId), $deliveryModuleId);
             $this->flash($request, 'success', $this->translator->trans('The tracking address has been saved.'));
         } else {
             $this->flash($request, 'danger', $this->translator->trans('The tracking address must start with http:// or https:// and contain %ID%, which is replaced by the tracking number.'));
