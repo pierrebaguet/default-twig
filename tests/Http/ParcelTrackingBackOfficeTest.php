@@ -204,7 +204,7 @@ final class ParcelTrackingBackOfficeTest extends WebIntegrationTestCase
 
         self::assertSame(1, AdminLogQuery::create()
             ->filterByResourceId($carrier->getId())
-            ->filterByMessage('%Tracking address of delivery module%', Criteria::LIKE)
+            ->filterByMessage('%Tracking address of delivery module%set to https://carrier.example/\\%ID\\%%', Criteria::LIKE)
             ->count());
     }
 

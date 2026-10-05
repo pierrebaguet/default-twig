@@ -2391,7 +2391,7 @@ return [
     '%ID% is replaced by the tracking number of the order. Leave empty when the carrier has no tracking page.' => '%ID% est remplacé par le numéro de suivi de la commande. Laissez vide si le transporteur n\'a pas de page de suivi.',
     'This module builds the tracking link of its parcels itself.' => 'Ce module construit lui-même le lien de suivi de ses colis.',
     'The tracking address has been saved.' => 'L\'adresse de suivi a été enregistrée.',
-    'The tracking address must start with http:// or https:// and contain %ID%, which is replaced by the tracking number.' => 'L\'adresse de suivi doit commencer par http:// ou https:// et contenir %ID%, remplacé par le numéro de suivi.',
+    'The tracking address must start with http:// or https:// and contain %ID% after the domain name. %ID% is replaced by the tracking number.' => 'L\'adresse de suivi doit commencer par http:// ou https:// et contenir %ID% après le nom de domaine. %ID% est remplacé par le numéro de suivi.',
     'Send the customer an email when their order is shipped' => 'Envoyer un e-mail au client quand sa commande est expédiée',
     'Sent when an order enters the "Sent" status, with the carrier, the tracking number and the tracking link. Turn it off when the customer is notified another way.' => 'Envoyé quand une commande passe au statut « Envoyée », avec le transporteur, le numéro et le lien de suivi. À désactiver si le client est prévenu autrement.',
 ];
