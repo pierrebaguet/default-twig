@@ -58,7 +58,8 @@ final readonly class DeliveryModuleTrackingUrl
 
     /**
      * Saves the template of a delivery module, or removes it when empty. A template
-     * that is not an http(s) address carrying %ID% is refused and nothing changes.
+     * that is not an http(s) address carrying %ID% is refused and nothing changes, and
+     * so is any template for a module that builds its tracking links itself.
      */
     public function save(int $moduleId, string $template): bool
     {
@@ -66,6 +67,11 @@ final readonly class DeliveryModuleTrackingUrl
         $module = ModuleQuery::create()->findPk($moduleId);
 
         if (!$this->isSupported() || null === $module || BaseModule::DELIVERY_MODULE_TYPE !== (int) $module->getType()) {
+            return false;
+        }
+
+        // A module that builds its links itself never reads a template: none is kept.
+        if ($this->isProvidedByModule($moduleId)) {
             return false;
         }
 
