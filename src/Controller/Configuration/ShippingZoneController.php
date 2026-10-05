@@ -147,12 +147,16 @@ final class ShippingZoneController
             return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
         }
 
-        if ($this->trackingUrl->save($deliveryModuleId, (string) $request->request->get('tracking_url', ''))) {
+        $template = trim((string) $request->request->get('tracking_url', ''));
+
+        if ($this->trackingUrl->save($deliveryModuleId, $template)) {
             // The address ends up as a link in front of every customer of the carrier.
-            $this->adminLogger->log(self::RESOURCE, AccessManager::UPDATE, \sprintf('Tracking address of delivery module %d changed', $deliveryModuleId), $deliveryModuleId);
+            $this->adminLogger->log(self::RESOURCE, AccessManager::UPDATE, '' === $template
+                ? \sprintf('Tracking address of delivery module %d removed', $deliveryModuleId)
+                : \sprintf('Tracking address of delivery module %d set to %s', $deliveryModuleId, $template), $deliveryModuleId);
             $this->flash($request, 'success', $this->translator->trans('The tracking address has been saved.'));
         } else {
-            $this->flash($request, 'danger', $this->translator->trans('The tracking address must start with http:// or https:// and contain %ID%, which is replaced by the tracking number.'));
+            $this->flash($request, 'danger', $this->translator->trans('The tracking address must start with http:// or https:// and contain %ID% after the domain name. %ID% is replaced by the tracking number.'));
         }
 
         return new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['delivery_module_id' => $deliveryModuleId]));

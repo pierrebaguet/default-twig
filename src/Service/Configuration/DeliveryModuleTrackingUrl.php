@@ -70,15 +70,15 @@ final readonly class DeliveryModuleTrackingUrl
             return false;
         }
 
-        // A module that builds its links itself never reads a template: none is kept.
-        if ($this->isProvidedByModule($moduleId)) {
-            return false;
-        }
-
         if ('' === $template) {
             ModuleConfigQuery::create()->deleteConfigValue($moduleId, OrderTrackingUrlResolver::TRACKING_URL_CONFIG_KEY);
 
             return true;
+        }
+
+        // A module that builds its links itself never reads a template: none is kept.
+        if ($this->isProvidedByModule($moduleId)) {
+            return false;
         }
 
         if (!OrderTrackingUrlResolver::isValidTemplate($template)) {
