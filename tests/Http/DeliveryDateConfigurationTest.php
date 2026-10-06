@@ -40,7 +40,10 @@ final class DeliveryDateConfigurationTest extends WebIntegrationTestCase
 
     private Module $carrier;
 
-    private string $shopClosedWeekdaysBefore;
+    /**
+     * Null when setUp() skipped the test before reading it: tearDown() then has nothing to restore.
+     */
+    private ?string $shopClosedWeekdaysBefore = null;
 
     protected function setUp(): void
     {
@@ -64,9 +67,15 @@ final class DeliveryDateConfigurationTest extends WebIntegrationTestCase
 
     protected function tearDown(): void
     {
-        ConfigQuery::write('delivery_closed_weekdays', $this->shopClosedWeekdaysBefore);
-        $this->getService(EventDispatcherInterface::class)->removeSubscriber($this->injector);
-        $this->injector->clear();
+        if (null !== $this->shopClosedWeekdaysBefore) {
+            ConfigQuery::write('delivery_closed_weekdays', $this->shopClosedWeekdaysBefore);
+        }
+
+        // Absent when setUp() skipped the test on a shop without the Twig back office.
+        if (isset($this->injector)) {
+            $this->getService(EventDispatcherInterface::class)->removeSubscriber($this->injector);
+            $this->injector->clear();
+        }
 
         parent::tearDown();
     }
