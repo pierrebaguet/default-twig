@@ -192,6 +192,11 @@ final readonly class OrderDetailContextBuilder
                 'module_description' => $this->moduleDescription((int) $order->getDeliveryModuleId(), $locale),
                 'delivery_ref' => (string) $order->getDeliveryRef(),
                 'tracking_url' => $this->trackingUrlResolver?->resolve($order),
+                // The day and the hours the buyer asked for, frozen on the order: a slot
+                // edited or deleted afterwards does not change them.
+                'delivery_date' => $order->getDeliveryDay(),
+                'delivery_slot_start' => $order->getDeliverySlotStartsAt(),
+                'delivery_slot_end' => $order->getDeliverySlotEndsAt(),
             ],
             'coupons' => $coupons,
             'consents' => $consents,
