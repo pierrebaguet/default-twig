@@ -17,6 +17,7 @@ namespace BackOfficeDefaultTwigBundle\Service\Catalog;
 use Propel\Runtime\Collection\ObjectCollection;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Api\Bridge\Propel\Filter\CustomFilters\Filters\Type\CheckboxType;
+use Thelia\Api\Bridge\Propel\Filter\CustomFilters\Filters\Type\DeltaType;
 use Thelia\Api\Bridge\Propel\Filter\CustomFilters\FilterService;
 use Thelia\Model\CategoryQuery;
 use Thelia\Model\ChoiceFilterOtherQuery;
@@ -24,6 +25,12 @@ use Thelia\Model\ChoiceFilterQuery;
 
 final readonly class ChoiceFilterPresenter
 {
+    /**
+     * The type of the price facet, drawn as a slider unless the merchant picks otherwise. Written
+     * out rather than read from the core's PriceFilter, which an older core does not ship.
+     */
+    private const string PRICE_FILTER_TYPE = 'price';
+
     public function __construct(
         private FilterService $filterService,
         private TranslatorInterface $translator,
@@ -56,7 +63,7 @@ final readonly class ChoiceFilterPresenter
         } else {
             $features = ChoiceFilterQuery::findFeaturesByTemplateId($templateId, [$locale]);
             $attributes = ChoiceFilterQuery::findAttributesByTemplateId($templateId, [$locale]);
-            $others = ChoiceFilterOtherQuery::findOther();
+            $others = $this->offeredOthers(ChoiceFilterOtherQuery::findOther([$locale]));
 
             if ($resolvedCategoryId === null) {
                 $messages[] = $this->translator->trans(
@@ -92,7 +99,7 @@ final readonly class ChoiceFilterPresenter
     {
         $features = ChoiceFilterQuery::findFeaturesByTemplateId($templateId, [$locale]);
         $attributes = ChoiceFilterQuery::findAttributesByTemplateId($templateId, [$locale]);
-        $others = ChoiceFilterOtherQuery::findOther([$locale]);
+        $others = $this->offeredOthers(ChoiceFilterOtherQuery::findOther([$locale]));
         $choiceFilters = ChoiceFilterQuery::create()
             ->filterByTemplateId($templateId)
             ->orderByPosition()
@@ -107,6 +114,38 @@ final readonly class ChoiceFilterPresenter
             'enabled' => \count($choiceFilters) > 0,
             'messages' => [],
         ];
+    }
+
+    /**
+     * The filters a merchant can arrange, without the ones the core withholds for want of the
+     * data they read: the rating facet on a shop without any review module would sit on the
+     * screen and never show on the listing.
+     *
+     * @param array<mixed>|ObjectCollection $others
+     *
+     * @return array<mixed>|ObjectCollection
+     */
+    private function offeredOthers(array|ObjectCollection $others): array|ObjectCollection
+    {
+        // A core older than 3.3 withholds nothing: the theme requires thelia/core ^3.2, where the
+        // method does not exist yet.
+        // @phpstan-ignore function.alreadyNarrowedType
+        if (!method_exists($this->filterService, 'withheldFilterNames')) {
+            return $others;
+        }
+
+        $withheld = $this->filterService->withheldFilterNames('products');
+
+        if ($withheld === []) {
+            return $others;
+        }
+
+        $rows = $others instanceof ObjectCollection ? $others->toArray() : $others;
+
+        return array_values(array_filter(
+            $rows,
+            static fn (mixed $row): bool => !\is_array($row) || !\in_array($row['Type'] ?? null, $withheld, true),
+        ));
     }
 
     /**
@@ -237,7 +276,7 @@ final readonly class ChoiceFilterPresenter
                 'feature' => $features[$id] ?? null,
                 'attribute' => $attributes[$id] ?? null,
                 default => $others[$type] ?? null,
-            } ?? CheckboxType::getName();
+            } ?? ($type === self::PRICE_FILTER_TYPE ? DeltaType::getName() : CheckboxType::getName());
         }
 
         return $filters;
