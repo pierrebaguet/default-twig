@@ -29,6 +29,7 @@ use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Domain\Shipping\DeliveryDate\Enum\DeliveryDateChoiceMode;
 use Thelia\Domain\Shipping\DeliveryDate\Exception\InvalidDeliveryDateSettingsException;
+use Thelia\Domain\Shipping\DeliveryDate\Service\ClosedWeekdays;
 use Thelia\Domain\Shipping\DeliveryDate\Service\DeliveryDateCalendar;
 use Thelia\Domain\Shipping\DeliveryDate\Service\DeliveryDateSettings;
 use Thelia\Model\DeliveryClosureQuery;
@@ -149,7 +150,7 @@ final class DeliveryDateController
                 'minimum_delay_days' => $rule?->getMinimumDelayDays() ?? 0,
                 'horizon_days' => $rule?->getHorizonDays() ?? 30,
                 'follows_shop' => null === $rule || null === $rule->getClosedWeekdays(),
-                'closed_weekdays' => null === $rule?->getClosedWeekdays() ? $this->settings->shopClosedWeekdays() : array_map('intval', array_filter(explode(',', (string) $rule->getClosedWeekdays()), static fn (string $day): bool => '' !== $day)),
+                'closed_weekdays' => null === $rule?->getClosedWeekdays() ? $this->settings->shopClosedWeekdays() : ClosedWeekdays::parse($rule->getClosedWeekdays()),
             ],
             'weekdays' => $this->weekdays($request->getLocale()),
             'slots' => array_map(static fn ($slot): array => [
