@@ -70,6 +70,7 @@ import BoVideoFormController from './controllers/bo-video-form_controller.js';
 import BoVirtualToggleController from './controllers/bo-virtual-toggle_controller.js';
 import BootstrapBridgeController from './controllers/bootstrap-bridge_controller.js';
 import BoPostLinkController from './controllers/bo-post-link_controller.js';
+import BoFreeShippingController from './controllers/bo-free-shipping_controller.js';
 import ConfirmModalController from './controllers/confirm-modal_controller.js';
 
 const app = Application.start();
@@ -141,6 +142,7 @@ app.register('bo-video-form', BoVideoFormController);
 app.register('bo-virtual-toggle', BoVirtualToggleController);
 app.register('bootstrap-bridge', BootstrapBridgeController);
 app.register('bo-post-link', BoPostLinkController);
+app.register('bo-free-shipping', BoFreeShippingController);
 app.register('confirm-modal', ConfirmModalController);
 
 export { app };

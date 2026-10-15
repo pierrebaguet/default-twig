@@ -18,6 +18,9 @@ use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Domain\Catalog\Product\ProductFacade;
 use Thelia\Domain\Shipping\ProductRule\ShippingSurchargeMode;
+use Thelia\Model\Area;
+use Thelia\Model\AreaDeliveryModule;
+use Thelia\Model\AreaDeliveryModuleQuery;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\CurrencyQuery;
 use Thelia\Model\Map\ProductTableMap;
@@ -235,6 +238,43 @@ final class ProductShippingRulesTest extends WebIntegrationTestCase
         }
 
         self::assertSame(1, $this->sheet($product)->filter('[data-testid="product-every-carrier-excluded"]')->count(), 'The sheet warns that the product cannot be shipped.');
+    }
+
+    public function testACarrierThatServesNoZoneIsNotACarrierLeftForAPhysicalProduct(): void
+    {
+        $product = $this->product();
+        $connection = $this->getPropelConnection();
+        $carriers = ModuleQuery::create()->filterByType(BaseModule::DELIVERY_MODULE_TYPE)->filterByActivate(1)->find($connection);
+        $servingZone = [];
+        foreach (AreaDeliveryModuleQuery::create()->find($connection) as $link) {
+            $servingZone[(int) $link->getDeliveryModuleId()] = true;
+        }
+
+        $carrierWithoutZone = null;
+        foreach ($carriers as $carrier) {
+            if (!isset($servingZone[(int) $carrier->getId()])) {
+                $carrierWithoutZone = $carrier;
+            }
+        }
+
+        if (null === $carrierWithoutZone || \count($carriers) < 2) {
+            self::markTestSkipped('The test shop needs an active carrier that serves no zone, beside another one.');
+        }
+
+        // Every carrier able to ship a parcel is excluded; the one left serves no zone.
+        $facade = $this->getService(ProductFacade::class);
+        foreach ($carriers as $carrier) {
+            if ($carrier->getId() !== $carrierWithoutZone->getId()) {
+                if (!isset($servingZone[(int) $carrier->getId()])) {
+                    $area = (new Area())->setName('Shipping rules probe area');
+                    $area->save($connection);
+                    (new AreaDeliveryModule())->setAreaId($area->getId())->setDeliveryModuleId($carrier->getId())->save($connection);
+                }
+                $facade->excludeDeliveryModule((int) $product->getId(), (int) $carrier->getId());
+            }
+        }
+
+        self::assertSame(1, $this->sheet($product)->filter('[data-testid="product-every-carrier-excluded"]')->count(), 'A carrier for downloads alone does not ship this product.');
     }
 
     private function product(): Product

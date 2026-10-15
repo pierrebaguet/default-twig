@@ -97,7 +97,7 @@
                 {% if every_carrier_excluded %}
                     <div class="alert alert-warning" role="alert" data-testid="product-every-carrier-excluded">
                         <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
-                        {{ 'Every active carrier is excluded for this product: it can no longer be shipped, and an order that contains it cannot be completed.'|trans }}
+                        {{ 'No active carrier can ship this product any more: an order that contains it cannot be completed.'|trans }}
                     </div>
                 {% endif %}
                 {% form_theme form with bo_form_themes only %}

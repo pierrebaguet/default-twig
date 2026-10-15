@@ -119,7 +119,7 @@ final class ProductType extends AbstractType
                 ])
                 ->add('shipping_surcharge', NumberType::class, [
                     'required' => false,
-                    'scale' => 6,
+                    'scale' => 2,
                     'html5' => true,
                     'constraints' => [new PositiveOrZero()],
                     'label' => $this->translator->trans('Shipping surcharge (excluding taxes)'),

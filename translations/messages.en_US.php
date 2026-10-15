@@ -470,7 +470,7 @@ return [
     'Surcharge applies' => 'Surcharge applies',
     'Shipping' => 'Shipping',
     'Added to the postage of the order, in the default currency. 0 for no surcharge.' => 'Added to the postage of the order, in the default currency. 0 for no surcharge.',
-    'Every active carrier is excluded for this product: it can no longer be shipped, and an order that contains it cannot be completed.' => 'Every active carrier is excluded for this product: it can no longer be shipped, and an order that contains it cannot be completed.',
+    'No active carrier can ship this product any more: an order that contains it cannot be completed.' => 'No active carrier can ship this product any more: an order that contains it cannot be completed.',
     'Excluded carriers' => 'Excluded carriers',
     'The carriers this product cannot be shipped with. An order that contains it is not offered them.' => 'The carriers this product cannot be shipped with. An order that contains it is not offered them.',
     'Select a carrier...' => 'Select a carrier...',

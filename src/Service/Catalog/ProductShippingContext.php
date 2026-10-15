@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Catalog;
 
 use BackOfficeDefaultTwigBundle\Repository\ModuleRepository;
+use Thelia\Model\AreaDeliveryModuleQuery;
 use Thelia\Model\CurrencyQuery;
 use Thelia\Model\Product;
 use Thelia\Model\ProductExcludedDeliveryModuleQuery;
@@ -24,7 +25,7 @@ use Thelia\Tools\TokenProvider;
 /**
  * What the carriers card of the product sheet shows: the delivery modules the
  * product is kept from, the active ones it could still be kept from, and
- * whether no active carrier is left for it.
+ * whether no active carrier able to ship it is left.
  */
 final readonly class ProductShippingContext
 {
@@ -60,10 +61,21 @@ final readonly class ProductShippingContext
             }
         }
 
+        // A physical product travels only with a carrier that serves a shipping zone,
+        // the way the checkout judges it: a carrier for downloads alone does not count.
+        $shippingCarrierIds = array_map(
+            'intval',
+            AreaDeliveryModuleQuery::create()->select(['DeliveryModuleId'])->distinct()->find()->getData(),
+        );
+        $carriersLeft = array_filter(
+            $available,
+            static fn (array $carrier): bool => (bool) $product->getVirtual() || \in_array($carrier['id'], $shippingCarrierIds, true),
+        );
+
         return [
             'excluded_carriers' => $excluded,
             'available_carriers' => $available,
-            'every_carrier_excluded' => [] !== $excluded && [] === $available,
+            'every_carrier_excluded' => [] !== $excluded && [] === $carriersLeft,
             'shipping_token' => $this->tokens->assignToken(),
             'default_currency_symbol' => (string) CurrencyQuery::create()->findOneByByDefault(1)?->getSymbol(),
         ];

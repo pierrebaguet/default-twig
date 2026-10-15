@@ -2545,7 +2545,7 @@ return [
     'Per unit' => 'Par unité',
     'Surcharge applies' => 'Le supplément s\'applique',
     'Added to the postage of the order, in the default currency. 0 for no surcharge.' => 'Ajouté aux frais de port de la commande, dans la devise par défaut. 0 pour aucun supplément.',
-    'Every active carrier is excluded for this product: it can no longer be shipped, and an order that contains it cannot be completed.' => 'Tous les transporteurs actifs sont exclus pour ce produit : il ne peut plus être expédié, et une commande qui le contient ne peut pas être finalisée.',
+    'No active carrier can ship this product any more: an order that contains it cannot be completed.' => 'Plus aucun transporteur actif ne peut expédier ce produit : une commande qui le contient ne peut pas être finalisée.',
     'Excluded carriers' => 'Transporteurs exclus',
     'The carriers this product cannot be shipped with. An order that contains it is not offered them.' => 'Les transporteurs avec lesquels ce produit ne peut pas être expédié. Une commande qui le contient ne se les voit pas proposer.',
     'Select a carrier...' => 'Choisir un transporteur...',
