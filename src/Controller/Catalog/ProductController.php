@@ -28,6 +28,7 @@ use BackOfficeDefaultTwigBundle\Service\Catalog\ProductPricingPresenter;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductPricingProvider;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductPricingSnapshot;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductRelationsContext;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductShippingContext;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use BackOfficeDefaultTwigBundle\Service\Listing\ListingThumbnailPresenter;
 use BackOfficeDefaultTwigBundle\Service\SaleUnit\RestrictedAdminGuard;
@@ -51,6 +52,7 @@ use Thelia\Core\Event\UpdatePositionEvent;
 use Thelia\Core\Event\UpdateSeoEvent;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Domain\Shipping\ProductRule\ShippingSurchargeMode;
 use Thelia\Model\BrandQuery;
 use Thelia\Model\CategoryQuery;
 use Thelia\Model\CurrencyQuery;
@@ -91,6 +93,7 @@ final class ProductController
         private readonly TokenProvider $tokens,
         private readonly TranslatorInterface $translator,
         private readonly ProductRelationsContext $relations,
+        private readonly ProductShippingContext $shipping,
         private readonly CategoryRepository $categories,
         private readonly ProductRepository $productRepository,
         private readonly EditLocaleResolver $editLocale,
@@ -263,6 +266,7 @@ final class ProductController
                 'next_url' => $navigation['next'] !== null ? $this->urls->generate(self::EDIT_ROUTE, ['product_id' => $navigation['next']]) : null,
             ],
             $this->relations->build($product, $locale, $uiLocale),
+            $this->shipping->build($product, $uiLocale),
         )));
     }
 
@@ -437,6 +441,9 @@ final class ProductController
             'brand_id' => $product->getBrandId(),
             'virtual_document_id' => $this->currentVirtualDocumentId($product),
             'guest_checkout_forbidden' => (bool) $product->getGuestCheckoutForbidden(),
+            'free_shipping' => (bool) $product->getFreeShipping(),
+            'shipping_surcharge' => (float) $product->getShippingSurcharge(),
+            'shipping_surcharge_mode' => (int) $product->getShippingSurchargeMode(),
         ], [
             'include_id' => true,
         ]);
@@ -481,6 +488,10 @@ final class ProductController
         $data = $validated->getData() ?? [];
         $productId = (int) ($data['id'] ?? 0);
 
+        // With free shipping ticked the surcharge does not apply: it is neither read
+        // nor reset, so the amount typed before comes back when the box is unticked.
+        $freeShipping = (bool) ($data['free_shipping'] ?? false);
+
         $event = new ProductUpdateEvent($productId);
         $event
             ->setLocale((string) ($data['locale'] ?? $this->defaultLocale()))
@@ -496,7 +507,10 @@ final class ProductController
             ->setBrandId($this->intOrNull($data['brand_id'] ?? null))
             // 0 clears the association, -1 leaves it untouched (product with several combinations).
             ->setVirtualDocumentId(isset($data['virtual_document_id']) ? (int) $data['virtual_document_id'] : -1)
-            ->setGuestCheckoutForbidden((bool) ($data['guest_checkout_forbidden'] ?? false));
+            ->setGuestCheckoutForbidden((bool) ($data['guest_checkout_forbidden'] ?? false))
+            ->setFreeShipping($freeShipping)
+            ->setShippingSurcharge($freeShipping ? null : (float) ($data['shipping_surcharge'] ?? 0))
+            ->setShippingSurchargeMode($freeShipping ? null : (ShippingSurchargeMode::tryFrom((int) ($data['shipping_surcharge_mode'] ?? 0)) ?? ShippingSurchargeMode::PerLine));
 
         return $event;
     }

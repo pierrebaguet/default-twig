@@ -16,6 +16,7 @@ namespace BackOfficeDefaultTwigBundle\Form\Product;
 
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\NumberType;
@@ -25,7 +26,9 @@ use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\Validator\Constraints\GreaterThan;
 use Symfony\Component\Validator\Constraints\NotBlank;
+use Symfony\Component\Validator\Constraints\PositiveOrZero;
 use Symfony\Contracts\Translation\TranslatorInterface;
+use Thelia\Domain\Shipping\ProductRule\ShippingSurchargeMode;
 
 final class ProductType extends AbstractType
 {
@@ -109,6 +112,26 @@ final class ProductType extends AbstractType
                 ->add('guest_checkout_forbidden', CheckboxType::class, [
                     'required' => false,
                     'label' => $this->translator->trans('Requires an account (no guest checkout)'),
+                ])
+                ->add('free_shipping', CheckboxType::class, [
+                    'required' => false,
+                    'label' => $this->translator->trans('Free shipping for this product'),
+                ])
+                ->add('shipping_surcharge', NumberType::class, [
+                    'required' => false,
+                    'scale' => 6,
+                    'html5' => true,
+                    'constraints' => [new PositiveOrZero()],
+                    'label' => $this->translator->trans('Shipping surcharge (excluding taxes)'),
+                ])
+                ->add('shipping_surcharge_mode', ChoiceType::class, [
+                    'required' => false,
+                    'choices' => [
+                        $this->translator->trans('Per cart line') => ShippingSurchargeMode::PerLine->value,
+                        $this->translator->trans('Per unit') => ShippingSurchargeMode::PerUnit->value,
+                    ],
+                    'placeholder' => false,
+                    'label' => $this->translator->trans('Surcharge applies'),
                 ])
                 ->add('chapo', TextareaType::class, [
                     'required' => false,

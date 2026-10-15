@@ -94,6 +94,12 @@
 
         <div class="tab-content">
             <div class="tab-pane fade {% if current_tab == 'general' %}show active{% endif %}" id="tab-general" role="tabpanel">
+                {% if every_carrier_excluded %}
+                    <div class="alert alert-warning" role="alert" data-testid="product-every-carrier-excluded">
+                        <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                        {{ 'Every active carrier is excluded for this product: it can no longer be shipped, and an order that contains it cannot be completed.'|trans }}
+                    </div>
+                {% endif %}
                 {% form_theme form with bo_form_themes only %}
                 {{ form_start(form, { action: path('admin.products.save', { product_id: product.id }), method: 'post', attr: { 'data-testid': 'product-edit-form', 'data-bo-unsaved-changes-target': 'form' } }) }}
                     <input type="hidden" name="product_id" value="{{ product.id }}">
@@ -136,6 +142,29 @@
                             <div class="form-check mb-3">
                                 {{ form_widget(form.guest_checkout_forbidden, { attr: { class: 'form-check-input', 'data-testid': 'product-edit-guest-checkout-forbidden' } }) }}
                                 {{ form_label(form.guest_checkout_forbidden, null, { label_attr: { class: 'form-check-label' } }) }}
+                            </div>
+                            <div class="card mb-3" data-testid="product-edit-shipping" data-controller="bo-free-shipping">
+                                <div class="card-body">
+                                    <h2 class="h6 card-title">{{ 'Shipping'|trans }}</h2>
+                                    <div class="form-check mb-3">
+                                        {{ form_widget(form.free_shipping, { attr: { class: 'form-check-input', 'data-testid': 'product-edit-free-shipping', 'data-bo-free-shipping-target': 'trigger', 'data-action': 'change->bo-free-shipping#update' } }) }}
+                                        {{ form_label(form.free_shipping, null, { label_attr: { class: 'form-check-label' } }) }}
+                                    </div>
+                                    <div data-bo-free-shipping-target="field">
+                                        <div class="mb-3">
+                                            {{ form_label(form.shipping_surcharge) }}
+                                            <div class="input-group">
+                                                {{ form_widget(form.shipping_surcharge, { attr: { class: 'form-control', min: 0, step: 'any', 'data-testid': 'product-edit-shipping-surcharge' } }) }}
+                                                <span class="input-group-text">{{ default_currency_symbol|default('') }}</span>
+                                            </div>
+                                            <small class="form-text text-muted">{{ 'Added to the postage of the order, in the default currency. 0 for no surcharge.'|trans }}</small>
+                                        </div>
+                                        <div class="mb-0">
+                                            {{ form_label(form.shipping_surcharge_mode) }}
+                                            {{ form_widget(form.shipping_surcharge_mode, { attr: { class: 'form-select', 'data-testid': 'product-edit-shipping-surcharge-mode' } }) }}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 {{ form_label(form.default_category) }}
@@ -221,6 +250,71 @@
                 {{ form_widget(form._token) }}
                 {# module fields added through the legacy form bridge are rendered by the module hooks, not auto-dumped #}
                 {{ form_end(form, {render_rest: false}) }}
+
+                {# Outside the product form: these forms post on their own. #}
+                <div class="card shadow-sm border-0 mt-3" data-testid="product-excluded-carriers">
+                    <div class="card-body">
+                        <h2 class="h5 mb-1">{{ 'Excluded carriers'|trans }}</h2>
+                        <p class="text-muted">{{ 'The carriers this product cannot be shipped with. An order that contains it is not offered them.'|trans }}</p>
+
+                        {% if available_carriers|length > 0 %}
+                            <form method="post" action="{{ path('admin.products.carrier.exclude') }}" class="mb-3" data-testid="product-carrier-exclude-form">
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <input type="hidden" name="_token" value="{{ shipping_token }}">
+                                <label for="product-carrier-module-id" class="form-label">{{ 'Carrier'|trans }}</label>
+                                <div class="input-group">
+                                    <select id="product-carrier-module-id" name="module_id" class="form-select" required data-testid="product-carrier-select">
+                                        <option value="">{{ 'Select a carrier...'|trans }}</option>
+                                        {% for carrier in available_carriers %}
+                                            <option value="{{ carrier.id }}">{{ carrier.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-primary" data-testid="product-carrier-exclude-add">
+                                        <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Exclude'|trans }}
+                                    </button>
+                                </div>
+                            </form>
+                        {% endif %}
+
+                        {% set carrier_rows = [] %}
+                        {% for carrier in excluded_carriers %}
+                            {% set carrier_rows = carrier_rows|merge([{
+                                'id': carrier.id,
+                                'title': carrier.title,
+                                '_actions': [
+                                    row_action('delete', 'Allow again'|trans, null, '#product-carrier-allow', 'UPDATE', 'admin.product', { 'module-id': carrier.id }),
+                                ],
+                            }]) %}
+                        {% endfor %}
+
+                        {{ component('BoDataTable', {
+                            id: 'product-excluded-carrier',
+                            columns: [
+                                column('id', 'ID'|trans, hideBelow: 'md'),
+                                column('title', 'Carrier'|trans),
+                                column_actions(),
+                            ],
+                            rows: carrier_rows,
+                            emptyMessage: 'No carrier is excluded for this product.'|trans,
+                        }) }}
+                    </div>
+                </div>
+
+                {% component 'BoConfirmDialog' with {
+                    id: 'product-carrier-allow',
+                    title: 'Allow a carrier again',
+                    formAction: path('admin.products.carrier.allow'),
+                    confirmLabel: 'Confirm',
+                    testid: 'product-carrier-allow',
+                    prefillTrigger: 'data-module-id',
+                    prefillInput: 'module_id',
+                } %}
+                    {% block body %}
+                        <p class="mb-0">{{ 'Do you really want to allow this carrier again for the product?'|trans }}</p>
+                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                        <input type="hidden" name="module_id" value="" data-bo-prefill-modal-target="input">
+                    {% endblock %}
+                {% endcomponent %}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'attributes' %}show active{% endif %}" id="tab-attributes" role="tabpanel">
