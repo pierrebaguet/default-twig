@@ -320,6 +320,61 @@
                     {% endblock %}
                 {% endcomponent %}
                 {% endif %}
+
+                <div class="card shadow-sm border-0 mt-3" data-testid="product-destination-restrictions">
+                    <div class="card-body">
+                        <h2 class="h5 mb-1">{{ 'Destination restrictions'|trans }}</h2>
+                        <p class="text-muted">{{ 'The groups of destinations this product is kept from, or is served to only. An address outside what a group allows is refused this product at the cart, the address step and the order.'|trans }}</p>
+
+                        {% if available_restrictions|length > 0 %}
+                            <form method="post" action="{{ path('admin.products.destination-restriction.attach') }}" class="mb-3" data-testid="product-destination-restriction-attach-form">
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <input type="hidden" name="_token" value="{{ destination_restriction_token }}">
+                                <label for="product-destination-restriction-id" class="form-label">{{ 'Destination restriction'|trans }}</label>
+                                <div class="input-group">
+                                    <select id="product-destination-restriction-id" name="restriction_id" class="form-select" required data-testid="product-destination-restriction-select">
+                                        <option value="">{{ 'Select a destination restriction...'|trans }}</option>
+                                        {% for restriction in available_restrictions %}
+                                            <option value="{{ restriction.id }}">{{ restriction.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-primary" data-testid="product-destination-restriction-attach">
+                                        <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Attach'|trans }}
+                                    </button>
+                                </div>
+                            </form>
+                        {% endif %}
+
+                        {% if product_restrictions is empty %}
+                            <p class="text-muted mb-0" data-testid="product-destination-restrictions-empty">{{ 'No destination restriction applies to this product.'|trans }}</p>
+                        {% else %}
+                            <ul class="list-group" data-testid="product-destination-restriction-list">
+                                {% for restriction in product_restrictions %}
+                                    <li class="list-group-item d-flex flex-wrap gap-2 justify-content-between align-items-center" data-testid="product-destination-restriction-{{ restriction.id }}">
+                                        <span>
+                                            {% if is_granted('VIEW', 'admin.configuration.destination-restriction') %}
+                                                <a href="{{ path('admin.destination-restriction.update', { restriction_id: restriction.id }) }}">{{ restriction.title }}</a>
+                                            {% else %}
+                                                {{ restriction.title }}
+                                            {% endif %}
+                                            <span class="text-muted small">{{ restriction.mode_allow ? 'Only listed destinations are served'|trans : 'Listed destinations are refused'|trans }}</span>
+                                            {% if not restriction.active %}<span class="badge text-bg-secondary ms-1">{{ 'Inactive'|trans }}</span>{% endif %}
+                                        </span>
+                                        <form method="post" action="{{ path('admin.products.destination-restriction.detach') }}">
+                                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                                            <input type="hidden" name="restriction_id" value="{{ restriction.id }}">
+                                            <input type="hidden" name="_token" value="{{ destination_restriction_token }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="product-destination-restriction-detach-{{ restriction.id }}">
+                                                <i class="bi bi-x-lg" aria-hidden="true"></i> {{ 'Detach'|trans }}
+                                            </button>
+                                        </form>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                </div>
+
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'attributes' %}show active{% endif %}" id="tab-attributes" role="tabpanel">

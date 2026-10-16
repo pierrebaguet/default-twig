@@ -1,0 +1,217 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% set restriction_title = restriction.title ?: restriction.code %}
+
+{% block title %}{{ 'Edit destination restriction'|trans }} - {{ restriction_title }}{% endblock %}
+{% block body_testid %}configuration-destination-restriction-edit{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.configuration.index') }}">{{ 'Configuration'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.destination-restriction.default') }}">{{ 'Destination restrictions'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ restriction_title }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    {% set can_update = is_granted('UPDATE', 'admin.configuration.destination-restriction') %}
+    {% set token = assignToken() %}
+
+    <div class="container-fluid" data-testid="destination-restriction-edit-page">
+        <h1 class="h3 mb-2">{{ 'Destination restriction'|trans }} <small class="text-muted"><code>{{ restriction.code }}</code> - #{{ restriction.id }}</small></h1>
+
+        <div class="mb-3">
+            {{ component('BoLanguageSwitcher', { currentLanguageId: edit_language_id }) }}
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <form method="post" action="{{ path('admin.destination-restriction.save', { restriction_id: restriction.id }) }}" data-testid="destination-restriction-edit-form">
+                    <input type="hidden" name="_token" value="{{ token }}">
+                    <input type="hidden" name="locale" value="{{ edit_locale }}">
+                    <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="destination-restriction-code" class="form-label">{{ 'Code'|trans }}</label>
+                            <input type="text" id="destination-restriction-code" name="code" class="form-control" value="{{ restriction.code }}" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label for="destination-restriction-mode" class="form-label">{{ 'Mode'|trans }}</label>
+                            <select id="destination-restriction-mode" name="mode" class="form-select" data-testid="destination-restriction-mode">
+                                {% for value, label in modes %}
+                                    <option value="{{ value }}" {{ (value == 1) == is_allow_mode ? 'selected' : '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">{{ 'With the first mode a listed destination is refused to the products of the group; with the second, every destination that is not listed is.'|trans }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="destination-restriction-title" class="form-label">{{ 'Title'|trans }}</label>
+                            <input type="text" id="destination-restriction-title" name="title" class="form-control" value="{{ restriction.title }}" data-testid="destination-restriction-title">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="destination-restriction-reason" class="form-label">{{ 'Reason shown to the buyer'|trans }}</label>
+                            <input type="text" id="destination-restriction-reason" name="reason" class="form-control" value="{{ restriction.reason }}" data-testid="destination-restriction-reason">
+                            <div class="form-text">{{ 'The sentence the buyer reads when a product is refused, for example "Alcohol licence".'|trans }}</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" class="form-check-input" id="destination-restriction-active" name="active" value="1" {{ restriction.active ? 'checked' : '' }}>
+                                <label class="form-check-label" for="destination-restriction-active">{{ 'This restriction is applied'|trans }}</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <a href="{{ path('admin.destination-restriction.default') }}" class="btn btn-outline-secondary">{{ 'Back'|trans }}</a>
+                        {% if can_update %}
+                            <button type="submit" class="btn btn-primary" data-testid="destination-restriction-edit-submit"><i class="bi bi-check2" aria-hidden="true"></i> {{ 'Save'|trans }}</button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-3" data-testid="destination-restriction-destinations">
+            <div class="card-header"><h2 class="h6 mb-0">{{ 'Destinations'|trans }}</h2></div>
+            <div class="card-body">
+                {% if destinations is empty %}
+                    <p class="text-muted" data-testid="destination-restriction-destinations-empty">{{ 'No destination listed yet.'|trans }}</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th>{{ 'Country'|trans }}</th>
+                                    <th>{{ 'Region'|trans }}</th>
+                                    <th class="text-end">{{ 'Actions'|trans }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for destination in destinations %}
+                                    <tr data-testid="destination-restriction-destination-{{ destination.id }}">
+                                        <td>{{ destination.country }}</td>
+                                        <td>{{ destination.region ?? 'Whole country'|trans }}</td>
+                                        <td class="text-end">
+                                            {% if can_update %}
+                                                <form method="post" action="{{ path('admin.destination-restriction.destination.remove', { restriction_id: restriction.id, destination_id: destination.id }) }}">
+                                                    <input type="hidden" name="_token" value="{{ token }}">
+                                                    <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="destination-restriction-destination-remove-{{ destination.id }}">
+                                                        <i class="bi bi-x-lg" aria-hidden="true"></i> {{ 'Remove'|trans }}
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+
+                {% if can_update %}
+                    <hr>
+                    {% if picked_country is null %}
+                        <div class="row g-3">
+                            <div class="col-lg-6">
+                                <form method="post" action="{{ path('admin.destination-restriction.destination.add', { restriction_id: restriction.id }) }}" data-testid="destination-restriction-country-form">
+                                    <input type="hidden" name="_token" value="{{ token }}">
+                                    <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                                    <label for="destination-restriction-country" class="form-label">{{ 'Add a whole country'|trans }}</label>
+                                    <div class="input-group">
+                                        <select id="destination-restriction-country" name="country_id" class="form-select" required data-testid="destination-restriction-country-select">
+                                            <option value="">{{ 'Select a country...'|trans }}</option>
+                                            {% for country in country_choices %}
+                                                <option value="{{ country.id }}">{{ country.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-primary" data-testid="destination-restriction-country-add">
+                                            <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Add'|trans }}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="col-lg-6">
+                                <form method="get" action="{{ path('admin.destination-restriction.update', { restriction_id: restriction.id }) }}" data-testid="destination-restriction-region-picker">
+                                    <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                                    <label for="destination-restriction-region-country" class="form-label">{{ 'Add a region'|trans }}</label>
+                                    <div class="input-group">
+                                        <select id="destination-restriction-region-country" name="country_id" class="form-select" required data-testid="destination-restriction-region-country-select">
+                                            <option value="">{{ 'Select a country...'|trans }}</option>
+                                            {% for country in region_country_choices %}
+                                                <option value="{{ country.id }}">{{ country.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-outline-primary" data-testid="destination-restriction-region-next">{{ 'Choose the region'|trans }}</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    {% else %}
+                        <form method="post" action="{{ path('admin.destination-restriction.destination.add', { restriction_id: restriction.id }) }}" data-testid="destination-restriction-region-form">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                            <input type="hidden" name="country_id" value="{{ picked_country.id }}">
+                            <label for="destination-restriction-region" class="form-label">{{ 'Region of %country%'|trans({ '%country%': picked_country.name }) }}</label>
+                            <div class="input-group">
+                                <select id="destination-restriction-region" name="state_id" class="form-select" data-testid="destination-restriction-region-select">
+                                    <option value="">{{ 'Whole country'|trans }}</option>
+                                    {% for region in picked_regions %}
+                                        <option value="{{ region.id }}">{{ region.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-primary" data-testid="destination-restriction-region-add">
+                                    <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Add'|trans }}
+                                </button>
+                                <a href="{{ path('admin.destination-restriction.update', { restriction_id: restriction.id, edit_language_id: edit_language_id }) }}" class="btn btn-outline-secondary">{{ 'Cancel'|trans }}</a>
+                            </div>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-3" data-testid="destination-restriction-products">
+            <div class="card-header"><h2 class="h6 mb-0">{{ 'Products'|trans }}</h2></div>
+            <div class="card-body">
+                <p class="text-muted">{{ 'A product joins or leaves a group from its own sheet, in the General tab.'|trans }}</p>
+                {% if products is empty %}
+                    <p class="text-muted mb-0" data-testid="destination-restriction-products-empty">{{ 'No product in this group yet.'|trans }}</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ 'Product'|trans }}</th>
+                                    <th>{{ 'Reference'|trans }}</th>
+                                    <th class="text-end">{{ 'Actions'|trans }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for product in products %}
+                                    <tr data-testid="destination-restriction-product-{{ product.id }}">
+                                        <td><a href="{{ product.url }}">{{ product.title }}</a></td>
+                                        <td><code>{{ product.ref }}</code></td>
+                                        <td class="text-end">
+                                            {% if can_update %}
+                                                <form method="post" action="{{ path('admin.destination-restriction.product.remove', { restriction_id: restriction.id, product_id: product.id }) }}">
+                                                    <input type="hidden" name="_token" value="{{ token }}">
+                                                    <input type="hidden" name="edit_language_id" value="{{ edit_language_id }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="destination-restriction-product-remove-{{ product.id }}">
+                                                        <i class="bi bi-x-lg" aria-hidden="true"></i> {{ 'Remove'|trans }}
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

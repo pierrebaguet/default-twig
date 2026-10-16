@@ -22,6 +22,7 @@ use BackOfficeDefaultTwigBundle\Repository\ProductRepository;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormAction;
 use BackOfficeDefaultTwigBundle\Service\Catalog\CategoryListPresenter;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductDestinationRestrictionContext;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductFilterPresenter;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductFilters;
 use BackOfficeDefaultTwigBundle\Service\Catalog\ProductPricingPresenter;
@@ -95,6 +96,7 @@ final class ProductController
         private readonly TranslatorInterface $translator,
         private readonly ProductRelationsContext $relations,
         private readonly ProductShippingContext $shipping,
+        private readonly ProductDestinationRestrictionContext $destinationRestrictions,
         private readonly CategoryRepository $categories,
         private readonly ProductRepository $productRepository,
         private readonly EditLocaleResolver $editLocale,
@@ -272,6 +274,7 @@ final class ProductController
             ],
             $this->relations->build($product, $locale, $uiLocale),
             $this->shipping->build($product, $uiLocale),
+            $this->destinationRestrictions->build($product, $uiLocale),
         )));
     }
 

@@ -1,0 +1,117 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% block title %}{{ 'Destination restrictions'|trans }}{% endblock %}
+{% block body_testid %}configuration-destination-restrictions{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.configuration.index') }}">{{ 'Configuration'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Destination restrictions'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="container-fluid" data-testid="destination-restrictions-page">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">{{ 'Destination restrictions'|trans }}</h1>
+            {% if is_granted('CREATE', 'admin.configuration.destination-restriction') %}
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#destination-restriction-create-modal" data-testid="destination-restriction-create-button">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'Add a destination restriction'|trans }}
+                </button>
+            {% endif %}
+        </div>
+
+        <p class="text-muted">
+            {{ 'A group lists countries and regions. Attach products to it from their sheet: a product is refused an address that the group does not allow, and the buyer is told the reason you wrote.'|trans }}
+        </p>
+
+        {{ component('BoDataTable', {
+            id: 'destination-restrictions',
+            columns: [
+                column('id', 'ID'|trans, 'start', null, hideBelow: 'md'),
+                column('title', 'Title'|trans, 'start'),
+                column('code', 'Code'|trans, 'start', null, hideBelow: 'lg'),
+                column('mode', 'Mode'|trans, 'start', null, hideBelow: 'md'),
+                column_toggle('active', 'Active'|trans, 'toggle_active_url'),
+                column('products', 'Products'|trans, 'end', null, hideBelow: 'md'),
+                column_position('position', 'Position'|trans, 'center', hideBelow: 'lg'),
+                column_actions('_actions', 'Actions'|trans),
+            ],
+            rows: rows,
+            emptyMessage: 'No destination restriction defined yet.'|trans,
+            tbodyAttributes: {
+                'data-controller': 'bo-sortable bo-position',
+                'data-bo-sortable-url-value': update_position_url,
+                'data-bo-sortable-token-value': update_position_token,
+                'data-bo-sortable-param-name-value': 'restriction_id',
+                'data-bo-position-url-value': update_position_url,
+                'data-bo-position-token-value': update_position_token,
+                'data-bo-position-param-name-value': 'restriction_id',
+                'data-bo-position-title-value': 'Position'|trans,
+                'data-bo-position-save-label-value': 'Save'|trans,
+                'data-bo-position-cancel-label-value': 'Cancel'|trans,
+            },
+        }) }}
+    </div>
+
+    <div class="modal fade" id="destination-restriction-create-modal" tabindex="-1" aria-labelledby="destination-restriction-create-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <form method="post" action="{{ path('admin.destination-restriction.create') }}" data-testid="destination-restriction-create-form">
+                    <input type="hidden" name="_token" value="{{ assignToken() }}">
+                    <input type="hidden" name="locale" value="{{ locale }}">
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="destination-restriction-create-modal-title">{{ 'Create a destination restriction'|trans }}</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ 'Close'|trans }}"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="destination-restriction-create-code" class="form-label">{{ 'Code'|trans }}</label>
+                            <input type="text" id="destination-restriction-create-code" name="code" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="destination-restriction-create-title" class="form-label">{{ 'Title'|trans }}</label>
+                            <input type="text" id="destination-restriction-create-title" name="title" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="destination-restriction-create-reason" class="form-label">{{ 'Reason shown to the buyer'|trans }}</label>
+                            <input type="text" id="destination-restriction-create-reason" name="reason" class="form-control">
+                            <div class="form-text">{{ 'The sentence the buyer reads when a product is refused, for example "Alcohol licence".'|trans }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="destination-restriction-create-mode" class="form-label">{{ 'Mode'|trans }}</label>
+                            <select id="destination-restriction-create-mode" name="mode" class="form-select">
+                                {% for value, label in modes %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="destination-restriction-create-active" name="active" value="1" checked>
+                            <label class="form-check-label" for="destination-restriction-create-active">{{ 'This restriction is applied'|trans }}</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ 'Cancel'|trans }}</button>
+                        <button type="submit" class="btn btn-primary" data-testid="destination-restriction-create-submit">
+                            <i class="bi bi-check2" aria-hidden="true"></i> {{ 'Create'|trans }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {{ component('BoConfirmDialog', {
+        id: 'destination-restriction-delete-modal',
+        title: 'Delete destination restriction',
+        formAction: path('admin.destination-restriction.delete'),
+        message: 'Do you really want to delete this destination restriction? Its products are no longer kept from its destinations.',
+        testid: 'destination-restriction-delete',
+        prefillTrigger: 'data-restriction-id',
+        prefillInput: 'restriction_id',
+    }) }}
+{% endblock %}
