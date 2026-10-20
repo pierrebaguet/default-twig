@@ -143,6 +143,8 @@
                                 {{ form_widget(form.guest_checkout_forbidden, { attr: { class: 'form-check-input', 'data-testid': 'product-edit-guest-checkout-forbidden' } }) }}
                                 {{ form_label(form.guest_checkout_forbidden, null, { label_attr: { class: 'form-check-label' } }) }}
                             </div>
+                            {# Only on a core that carries the shipping rules of a product. #}
+                            {% if form.free_shipping is defined %}
                             <div class="card mb-3" data-testid="product-edit-shipping" data-controller="bo-free-shipping">
                                 <div class="card-body">
                                     <h2 class="h6 card-title">{{ 'Shipping'|trans }}</h2>
@@ -166,6 +168,7 @@
                                     </div>
                                 </div>
                             </div>
+                            {% endif %}
                             <div class="mb-3">
                                 {{ form_label(form.default_category) }}
                                 <select name="{{ form.default_category.vars.full_name }}" class="form-select" data-testid="product-edit-category" required>
@@ -251,6 +254,7 @@
                 {# module fields added through the legacy form bridge are rendered by the module hooks, not auto-dumped #}
                 {{ form_end(form, {render_rest: false}) }}
 
+                {% if shipping_rules %}
                 {# Outside the product form: these forms post on their own. #}
                 <div class="card shadow-sm border-0 mt-3" data-testid="product-excluded-carriers">
                     <div class="card-body">
@@ -315,6 +319,7 @@
                         <input type="hidden" name="module_id" value="" data-bo-prefill-modal-target="input">
                     {% endblock %}
                 {% endcomponent %}
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'attributes' %}show active{% endif %}" id="tab-attributes" role="tabpanel">

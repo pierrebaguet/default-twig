@@ -17,9 +17,11 @@ namespace BackOfficeDefaultTwigBundle\Controller\Catalog;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormErrorRenderer;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductShippingContext;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Thelia\Core\Security\AccessManager;
@@ -54,7 +56,7 @@ final readonly class ProductShippingController
         return $this->change(
             $request,
             'Product carrier exclusion',
-            $this->products->excludeDeliveryModule(...),
+            fn (int $productId, int $moduleId) => $this->products->excludeDeliveryModule($productId, $moduleId),
             'Carrier %module excluded for product %product',
         );
     }
@@ -65,7 +67,7 @@ final readonly class ProductShippingController
         return $this->change(
             $request,
             'Product carrier allowance',
-            $this->products->allowDeliveryModule(...),
+            fn (int $productId, int $moduleId) => $this->products->allowDeliveryModule($productId, $moduleId),
             'Carrier %module allowed again for product %product',
         );
     }
@@ -75,6 +77,11 @@ final readonly class ProductShippingController
      */
     private function change(Request $request, string $actionLabel, callable $change, string $logMessage): Response
     {
+        // A core that predates the shipping rules of a product has nothing to change.
+        if (!ProductShippingContext::coreHasShippingRules()) {
+            throw new NotFoundHttpException();
+        }
+
         if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
             return $denied;
         }

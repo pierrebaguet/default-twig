@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Form\Product;
 
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductShippingContext;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -112,27 +113,14 @@ final class ProductType extends AbstractType
                 ->add('guest_checkout_forbidden', CheckboxType::class, [
                     'required' => false,
                     'label' => $this->translator->trans('Requires an account (no guest checkout)'),
-                ])
-                ->add('free_shipping', CheckboxType::class, [
-                    'required' => false,
-                    'label' => $this->translator->trans('Free shipping for this product'),
-                ])
-                ->add('shipping_surcharge', NumberType::class, [
-                    'required' => false,
-                    'scale' => 2,
-                    'html5' => true,
-                    'constraints' => [new PositiveOrZero()],
-                    'label' => $this->translator->trans('Shipping surcharge (excluding taxes)'),
-                ])
-                ->add('shipping_surcharge_mode', ChoiceType::class, [
-                    'required' => false,
-                    'choices' => [
-                        $this->translator->trans('Per cart line') => ShippingSurchargeMode::PerLine->value,
-                        $this->translator->trans('Per unit') => ShippingSurchargeMode::PerUnit->value,
-                    ],
-                    'placeholder' => false,
-                    'label' => $this->translator->trans('Surcharge applies'),
-                ])
+                ]);
+
+            // Only on a core that carries the shipping rules of a product.
+            if (ProductShippingContext::coreHasShippingRules()) {
+                $this->addShippingRules($builder);
+            }
+
+            $builder
                 ->add('chapo', TextareaType::class, [
                     'required' => false,
                     'label' => $this->translator->trans('Summary'),
@@ -146,6 +134,31 @@ final class ProductType extends AbstractType
                     'label' => $this->translator->trans('Conclusion'),
                 ]);
         }
+    }
+
+    private function addShippingRules(FormBuilderInterface $builder): void
+    {
+        $builder
+            ->add('free_shipping', CheckboxType::class, [
+                'required' => false,
+                'label' => $this->translator->trans('Free shipping for this product'),
+            ])
+            ->add('shipping_surcharge', NumberType::class, [
+                'required' => false,
+                'scale' => 2,
+                'html5' => true,
+                'constraints' => [new PositiveOrZero()],
+                'label' => $this->translator->trans('Shipping surcharge (excluding taxes)'),
+            ])
+            ->add('shipping_surcharge_mode', ChoiceType::class, [
+                'required' => false,
+                'choices' => [
+                    $this->translator->trans('Per cart line') => ShippingSurchargeMode::PerLine->value,
+                    $this->translator->trans('Per unit') => ShippingSurchargeMode::PerUnit->value,
+                ],
+                'placeholder' => false,
+                'label' => $this->translator->trans('Surcharge applies'),
+            ]);
     }
 
     public function configureOptions(OptionsResolver $resolver): void

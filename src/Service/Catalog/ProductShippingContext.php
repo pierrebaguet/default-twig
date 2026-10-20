@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Catalog;
 
 use BackOfficeDefaultTwigBundle\Repository\ModuleRepository;
+use Thelia\Domain\Shipping\ProductRule\ShippingSurchargeMode;
 use Thelia\Model\AreaDeliveryModuleQuery;
 use Thelia\Model\CurrencyQuery;
 use Thelia\Model\Product;
@@ -26,6 +27,9 @@ use Thelia\Tools\TokenProvider;
  * What the carriers card of the product sheet shows: the delivery modules the
  * product is kept from, the active ones it could still be kept from, and
  * whether no active carrier able to ship it is left.
+ *
+ * The theme installs on a core that may predate the shipping rules of a
+ * product: the sheet then shows neither the card nor the fields.
  */
 final readonly class ProductShippingContext
 {
@@ -36,7 +40,17 @@ final readonly class ProductShippingContext
     }
 
     /**
+     * Whether the core carries the shipping rules of a product, read on a class
+     * shipped with them.
+     */
+    public static function coreHasShippingRules(): bool
+    {
+        return class_exists(ShippingSurchargeMode::class);
+    }
+
+    /**
      * @return array{
+     *     shipping_rules: bool,
      *     excluded_carriers: list<array{id: int, title: string, code: string}>,
      *     available_carriers: list<array{id: int, title: string, code: string}>,
      *     every_carrier_excluded: bool,
@@ -46,6 +60,17 @@ final readonly class ProductShippingContext
      */
     public function build(Product $product, string $uiLocale): array
     {
+        if (!self::coreHasShippingRules()) {
+            return [
+                'shipping_rules' => false,
+                'excluded_carriers' => [],
+                'available_carriers' => [],
+                'every_carrier_excluded' => false,
+                'shipping_token' => null,
+                'default_currency_symbol' => '',
+            ];
+        }
+
         $excludedIds = [];
         foreach (ProductExcludedDeliveryModuleQuery::create()->filterByProductId($product->getId())->find() as $exclusion) {
             $excludedIds[(int) $exclusion->getModuleId()] = true;
@@ -73,6 +98,7 @@ final readonly class ProductShippingContext
         );
 
         return [
+            'shipping_rules' => true,
             'excluded_carriers' => $excluded,
             'available_carriers' => $available,
             'every_carrier_excluded' => [] !== $excluded && [] === $carriersLeft,

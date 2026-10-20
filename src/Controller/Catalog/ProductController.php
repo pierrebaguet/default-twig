@@ -426,6 +426,13 @@ final class ProductController
 
     private function buildUpdateForm(Product $product, string $locale): FormInterface
     {
+        // The shipping rules exist only on a core that carries them.
+        $shippingRules = ProductShippingContext::coreHasShippingRules() ? [
+            'free_shipping' => (bool) $product->getFreeShipping(),
+            'shipping_surcharge' => (float) $product->getShippingSurcharge(),
+            'shipping_surcharge_mode' => (int) $product->getShippingSurchargeMode(),
+        ] : [];
+
         return $this->formFactory->createNamed('thelia_product_modification', ProductType::class, [
             'id' => $product->getId(),
             'locale' => $locale,
@@ -441,10 +448,7 @@ final class ProductController
             'brand_id' => $product->getBrandId(),
             'virtual_document_id' => $this->currentVirtualDocumentId($product),
             'guest_checkout_forbidden' => (bool) $product->getGuestCheckoutForbidden(),
-            'free_shipping' => (bool) $product->getFreeShipping(),
-            'shipping_surcharge' => (float) $product->getShippingSurcharge(),
-            'shipping_surcharge_mode' => (int) $product->getShippingSurchargeMode(),
-        ], [
+        ] + $shippingRules, [
             'include_id' => true,
         ]);
     }
@@ -488,10 +492,6 @@ final class ProductController
         $data = $validated->getData() ?? [];
         $productId = (int) ($data['id'] ?? 0);
 
-        // With free shipping ticked the surcharge does not apply: it is neither read
-        // nor reset, so the amount typed before comes back when the box is unticked.
-        $freeShipping = (bool) ($data['free_shipping'] ?? false);
-
         $event = new ProductUpdateEvent($productId);
         $event
             ->setLocale((string) ($data['locale'] ?? $this->defaultLocale()))
@@ -507,10 +507,18 @@ final class ProductController
             ->setBrandId($this->intOrNull($data['brand_id'] ?? null))
             // 0 clears the association, -1 leaves it untouched (product with several combinations).
             ->setVirtualDocumentId(isset($data['virtual_document_id']) ? (int) $data['virtual_document_id'] : -1)
-            ->setGuestCheckoutForbidden((bool) ($data['guest_checkout_forbidden'] ?? false))
-            ->setFreeShipping($freeShipping)
-            ->setShippingSurcharge($freeShipping ? null : (float) ($data['shipping_surcharge'] ?? 0))
-            ->setShippingSurchargeMode($freeShipping ? null : (ShippingSurchargeMode::tryFrom((int) ($data['shipping_surcharge_mode'] ?? 0)) ?? ShippingSurchargeMode::PerLine));
+            ->setGuestCheckoutForbidden((bool) ($data['guest_checkout_forbidden'] ?? false));
+
+        if (ProductShippingContext::coreHasShippingRules()) {
+            // With free shipping ticked the surcharge does not apply: it is neither read
+            // nor reset, so the amount typed before comes back when the box is unticked.
+            $freeShipping = (bool) ($data['free_shipping'] ?? false);
+
+            $event
+                ->setFreeShipping($freeShipping)
+                ->setShippingSurcharge($freeShipping ? null : (float) ($data['shipping_surcharge'] ?? 0))
+                ->setShippingSurchargeMode($freeShipping ? null : (ShippingSurchargeMode::tryFrom((int) ($data['shipping_surcharge_mode'] ?? 0)) ?? ShippingSurchargeMode::PerLine));
+        }
 
         return $event;
     }

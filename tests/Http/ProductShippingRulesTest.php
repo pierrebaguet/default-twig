@@ -43,7 +43,7 @@ final class ProductShippingRulesTest extends WebIntegrationTestCase
 {
     private const FORM = 'thelia_product_modification';
 
-    private AdminSessionInjector $injector;
+    private ?AdminSessionInjector $injector = null;
 
     private FixtureFactory $factory;
 
@@ -57,18 +57,26 @@ final class ProductShippingRulesTest extends WebIntegrationTestCase
             );
         }
 
-        $this->injector = new AdminSessionInjector();
-        $this->getService(EventDispatcherInterface::class)->addSubscriber($this->injector);
+        // The theme runs on the published core as well, which may predate the shipping
+        // rules of a product: the sheet then has nothing of them to test.
+        if (!class_exists(ShippingSurchargeMode::class)) {
+            self::markTestSkipped('The core does not carry the shipping rules of a product.');
+        }
+
+        $injector = new AdminSessionInjector();
+        $this->getService(EventDispatcherInterface::class)->addSubscriber($injector);
+        $this->injector = $injector;
         $this->factory = new FixtureFactory($this->getPropelConnection());
 
         $admin = $this->factory->admin();
         $admin->eraseCredentials();
-        $this->injector->setAdmin($admin);
+        $injector->setAdmin($admin);
     }
 
     protected function tearDown(): void
     {
-        $this->injector->clear();
+        // Null when the case was skipped before the session was set up.
+        $this->injector?->clear();
 
         parent::tearDown();
     }
