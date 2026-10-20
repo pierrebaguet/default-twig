@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductDestinationRestrictionContext;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Core\Security\AccessManager;
@@ -51,6 +52,12 @@ final class DestinationRestrictionScreenTest extends WebIntegrationTestCase
 
         if (ConfigQuery::read('active-admin-template') !== 'default-twig') {
             self::markTestSkipped('The Twig back-office is not the active admin template of the test shop: its routes are not registered.');
+        }
+
+        // The theme runs on the published core as well, which may predate the destination
+        // restrictions: DestinationRestrictionWithoutCoreTest covers the back office there.
+        if (!ProductDestinationRestrictionContext::coreHasDestinationRestrictions()) {
+            self::markTestSkipped('The core does not carry the destination restrictions.');
         }
 
         $this->injector = new AdminSessionInjector();

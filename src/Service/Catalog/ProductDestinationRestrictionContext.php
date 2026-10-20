@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Service\Catalog;
 
+use Thelia\Domain\Shipping\DestinationRestriction\DestinationRestrictionFacade;
 use Thelia\Model\DestinationRestriction;
 use Thelia\Model\DestinationRestrictionQuery;
 use Thelia\Model\Product;
@@ -23,6 +24,9 @@ use Thelia\Tools\TokenProvider;
 /**
  * What the destination restrictions card of the product sheet shows: the groups the
  * product belongs to and the ones it could still join.
+ *
+ * The theme installs on a core that may predate the destination restrictions: the
+ * back office then shows neither the card, nor the Configuration screen, nor its menu.
  */
 final readonly class ProductDestinationRestrictionContext
 {
@@ -31,7 +35,17 @@ final readonly class ProductDestinationRestrictionContext
     }
 
     /**
+     * Whether the core carries the destination restrictions, read on a class shipped
+     * with them. Every screen, route and card of the feature asks this one question.
+     */
+    public static function coreHasDestinationRestrictions(): bool
+    {
+        return class_exists(DestinationRestrictionFacade::class);
+    }
+
+    /**
      * @return array{
+     *     destination_restrictions: bool,
      *     product_restrictions: list<array{id: int, title: string, code: string, mode_allow: bool, active: bool}>,
      *     available_restrictions: list<array{id: int, title: string, code: string}>,
      *     destination_restriction_token: string|null,
@@ -39,6 +53,15 @@ final readonly class ProductDestinationRestrictionContext
      */
     public function build(Product $product, string $uiLocale): array
     {
+        if (!self::coreHasDestinationRestrictions()) {
+            return [
+                'destination_restrictions' => false,
+                'product_restrictions' => [],
+                'available_restrictions' => [],
+                'destination_restriction_token' => null,
+            ];
+        }
+
         $attachedIds = [];
         foreach (ProductDestinationRestrictionQuery::create()->filterByProductId($product->getId())->find() as $link) {
             $attachedIds[(int) $link->getDestinationRestrictionId()] = true;
@@ -65,6 +88,7 @@ final readonly class ProductDestinationRestrictionContext
         }
 
         return [
+            'destination_restrictions' => true,
             'product_restrictions' => $attached,
             'available_restrictions' => $available,
             'destination_restriction_token' => $this->tokens->assignToken(),

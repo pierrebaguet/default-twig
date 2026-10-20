@@ -17,9 +17,11 @@ namespace BackOfficeDefaultTwigBundle\Controller\Catalog;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormErrorRenderer;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductDestinationRestrictionContext;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Thelia\Core\Security\AccessManager;
@@ -30,7 +32,8 @@ use Thelia\Tools\TokenProvider;
 /**
  * Puts a product in a destination restriction group, or takes it out, from the product
  * sheet. The facade refuses an unknown group or product: the refusal comes back as an
- * error message on the sheet.
+ * error message on the sheet. On a core without the destination restrictions both
+ * routes answer 404.
  */
 #[Route('/admin/products', name: 'admin.products.')]
 final readonly class ProductDestinationRestrictionController
@@ -43,8 +46,9 @@ final readonly class ProductDestinationRestrictionController
         private AdminFormErrorRenderer $errorRenderer,
         private AdminLogger $adminLogger,
         private TokenProvider $tokens,
-        private DestinationRestrictionFacade $restrictions,
         private UrlGeneratorInterface $urls,
+        // Null on a core that predates the destination restrictions: the class is not there to autowire.
+        private ?DestinationRestrictionFacade $restrictions = null,
     ) {
     }
 
@@ -54,7 +58,7 @@ final readonly class ProductDestinationRestrictionController
         return $this->change(
             $request,
             'Product destination restriction attachment',
-            $this->restrictions->attachProduct(...),
+            fn (int $groupId, int $productId) => $this->facade()->attachProduct($groupId, $productId),
             'Destination restriction %group attached to product %product',
         );
     }
@@ -65,7 +69,7 @@ final readonly class ProductDestinationRestrictionController
         return $this->change(
             $request,
             'Product destination restriction detachment',
-            $this->restrictions->detachProduct(...),
+            fn (int $groupId, int $productId) => $this->facade()->detachProduct($groupId, $productId),
             'Destination restriction %group detached from product %product',
         );
     }
@@ -75,6 +79,11 @@ final readonly class ProductDestinationRestrictionController
      */
     private function change(Request $request, string $actionLabel, callable $change, string $logMessage): Response
     {
+        // A core that predates the destination restrictions has nothing to change.
+        if (!ProductDestinationRestrictionContext::coreHasDestinationRestrictions()) {
+            throw new NotFoundHttpException();
+        }
+
         if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
             return $denied;
         }
@@ -92,5 +101,10 @@ final readonly class ProductDestinationRestrictionController
         }
 
         return new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['product_id' => $productId, 'current_tab' => 'general']));
+    }
+
+    private function facade(): DestinationRestrictionFacade
+    {
+        return $this->restrictions ?? throw new NotFoundHttpException();
     }
 }

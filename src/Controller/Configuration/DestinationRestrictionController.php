@@ -17,18 +17,19 @@ namespace BackOfficeDefaultTwigBundle\Controller\Configuration;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormErrorRenderer;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductDestinationRestrictionContext;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use BackOfficeDefaultTwigBundle\UiComponents\DataTable\RowAction;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Core\Event\UpdatePositionEvent;
 use Thelia\Core\HttpFoundation\Session\Session;
 use Thelia\Core\Security\AccessManager;
-use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Domain\Shipping\DestinationRestriction\DestinationRestrictionException;
 use Thelia\Domain\Shipping\DestinationRestriction\DestinationRestrictionFacade;
 use Thelia\Model\CountryI18nQuery;
@@ -48,12 +49,15 @@ use Twig\Environment;
  * The groups of destinations a product can be kept from: the countries and regions they
  * list, whether the list is refused or the only one served, and the sentence the buyer is
  * given. Every rule lives in the core facade; a refusal reaches the merchant as a flash
- * message, never as a 500.
+ * message, never as a 500. On a core without the destination restrictions every route
+ * answers 404.
  */
 #[Route('/admin/configuration/destination-restrictions', name: 'admin.destination-restriction.')]
 final class DestinationRestrictionController
 {
-    private const RESOURCE = AdminResources::DESTINATION_RESTRICTION;
+    // The value of AdminResources::DESTINATION_RESTRICTION, written out: a constant expression
+    // naming it fails at compile time on a core that predates the destination restrictions.
+    private const RESOURCE = 'admin.configuration.destination-restriction';
     private const LIST_ROUTE = 'admin.destination-restriction.default';
     private const EDIT_ROUTE = 'admin.destination-restriction.update';
     private const LIST_TEMPLATE = '@BackOfficeDefaultTwig/configuration/destination-restriction/list.html.twig';
@@ -68,13 +72,16 @@ final class DestinationRestrictionController
         private readonly TokenProvider $tokens,
         private readonly TranslatorInterface $translator,
         private readonly EditLocaleResolver $editLocale,
-        private readonly DestinationRestrictionFacade $restrictions,
+        // Null on a core that predates the destination restrictions: the class is not there to autowire.
+        private readonly ?DestinationRestrictionFacade $restrictions = null,
     ) {
     }
 
     #[Route('', name: 'default', methods: ['GET'])]
     public function list(Request $request): Response
     {
+        $this->guard();
+
         if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::VIEW)) {
             return $denied;
         }
@@ -138,7 +145,7 @@ final class DestinationRestrictionController
             AccessManager::CREATE,
             'Destination restriction creation',
             function () use ($request, $locale): string {
-                $group = $this->restrictions->save(
+                $group = $this->facade()->save(
                     null,
                     (string) $request->request->get('code', ''),
                     $this->mode($request),
@@ -155,6 +162,8 @@ final class DestinationRestrictionController
     #[Route('/{restriction_id}', name: 'update', methods: ['GET'], requirements: ['restriction_id' => '\d+'])]
     public function updateView(int $restriction_id, Request $request): Response
     {
+        $this->guard();
+
         if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::VIEW)) {
             return $denied;
         }
@@ -224,7 +233,7 @@ final class DestinationRestrictionController
             $request,
             AccessManager::UPDATE,
             'Destination restriction update',
-            fn () => $this->restrictions->save(
+            fn () => $this->facade()->save(
                 $restriction_id,
                 (string) $request->request->get('code', ''),
                 $this->mode($request),
@@ -245,7 +254,7 @@ final class DestinationRestrictionController
             $request,
             AccessManager::DELETE,
             'Destination restriction deletion',
-            fn () => $this->restrictions->delete($restrictionId),
+            fn () => $this->facade()->delete($restrictionId),
             $this->urls->generate(self::LIST_ROUTE),
             $restrictionId,
         );
@@ -261,7 +270,7 @@ final class DestinationRestrictionController
             function () use ($restriction_id): void {
                 $group = DestinationRestrictionQuery::create()->findPk($restriction_id)
                     ?? throw new DestinationRestrictionException($this->translator->trans('No such destination restriction.'));
-                $this->restrictions->save($restriction_id, (string) $group->getCode(), (int) $group->getMode(), !$group->getActive(), []);
+                $this->facade()->save($restriction_id, (string) $group->getCode(), (int) $group->getMode(), !$group->getActive(), []);
             },
             $this->urls->generate(self::LIST_ROUTE),
             $restriction_id,
@@ -303,7 +312,7 @@ final class DestinationRestrictionController
             $request,
             AccessManager::UPDATE,
             'Destination restriction destination added',
-            fn () => $this->restrictions->addDestination(
+            fn () => $this->facade()->addDestination(
                 $restriction_id,
                 (int) $request->request->get('country_id', 0),
                 $stateId > 0 ? $stateId : null,
@@ -320,7 +329,7 @@ final class DestinationRestrictionController
             $request,
             AccessManager::UPDATE,
             'Destination restriction destination removed',
-            fn () => $this->restrictions->removeDestination($restriction_id, $destination_id),
+            fn () => $this->facade()->removeDestination($restriction_id, $destination_id),
             $this->editUrl($restriction_id, $request),
             $restriction_id,
         );
@@ -333,7 +342,7 @@ final class DestinationRestrictionController
             $request,
             AccessManager::UPDATE,
             'Destination restriction product removed',
-            fn () => $this->restrictions->detachProduct($restriction_id, $product_id),
+            fn () => $this->facade()->detachProduct($restriction_id, $product_id),
             $this->editUrl($restriction_id, $request),
             $restriction_id,
         );
@@ -348,6 +357,8 @@ final class DestinationRestrictionController
      */
     private function write(Request $request, string $access, string $actionLabel, callable $write, string $backTo, ?int $resourceId = null): Response
     {
+        $this->guard();
+
         if ($denied = $this->access->check(self::RESOURCE, [], $access)) {
             return $denied;
         }
@@ -376,6 +387,21 @@ final class DestinationRestrictionController
         }
 
         return new RedirectResponse($backTo);
+    }
+
+    /**
+     * A core that predates the destination restrictions has no screen to show.
+     */
+    private function guard(): void
+    {
+        if (!ProductDestinationRestrictionContext::coreHasDestinationRestrictions()) {
+            throw new NotFoundHttpException();
+        }
+    }
+
+    private function facade(): DestinationRestrictionFacade
+    {
+        return $this->restrictions ?? throw new NotFoundHttpException();
     }
 
     private function editUrl(int $restrictionId, Request $request): string

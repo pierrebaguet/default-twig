@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Controller\Configuration;
 
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
+use BackOfficeDefaultTwigBundle\Service\Catalog\ProductDestinationRestrictionContext;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Thelia\Core\Security\AccessManager;
@@ -36,6 +37,9 @@ final class ConfigurationController
             return $denied;
         }
 
-        return new Response($this->twig->render('@BackOfficeDefaultTwig/configuration/index.html.twig'));
+        return new Response($this->twig->render('@BackOfficeDefaultTwig/configuration/index.html.twig', [
+            // The menu offers the destination restrictions only on a core that carries them.
+            'destination_restrictions' => ProductDestinationRestrictionContext::coreHasDestinationRestrictions(),
+        ]));
     }
 }

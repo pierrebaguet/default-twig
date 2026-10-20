@@ -321,6 +321,8 @@
                 {% endcomponent %}
                 {% endif %}
 
+                {# Only on a core that carries the destination restrictions. #}
+                {% if destination_restrictions %}
                 <div class="card shadow-sm border-0 mt-3" data-testid="product-destination-restrictions">
                     <div class="card-body">
                         <h2 class="h5 mb-1">{{ 'Destination restrictions'|trans }}</h2>
@@ -374,6 +376,7 @@
                         {% endif %}
                     </div>
                 </div>
+                {% endif %}
 
             </div>
 
