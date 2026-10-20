@@ -16,6 +16,8 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Security\AccessManager;
+use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Domain\Catalog\Product\ProductFacade;
 use Thelia\Domain\Shipping\ProductRule\ShippingSurchargeMode;
 use Thelia\Model\Area;
@@ -233,6 +235,46 @@ final class ProductShippingRulesTest extends WebIntegrationTestCase
         self::assertSame(0, $this->exclusionsOf($product, $carrier));
     }
 
+    public function testACarrierCannotBeAllowedAgainWithoutTheToken(): void
+    {
+        $product = $this->product();
+        $carrier = $this->deliveryModule();
+        $this->getService(ProductFacade::class)->excludeDeliveryModule((int) $product->getId(), (int) $carrier->getId());
+
+        $this->client->request('POST', '/admin/products/carrier/allow', [
+            'product_id' => $product->getId(),
+            'module_id' => $carrier->getId(),
+        ]);
+
+        self::assertSame(1, $this->exclusionsOf($product, $carrier));
+    }
+
+    public function testATokenInTheAddressOnlyChangesNoCarrier(): void
+    {
+        $product = $this->product();
+        $carrier = $this->deliveryModule();
+        $token = $this->tokenOf($this->sheet($product), 'product-carrier-exclude-form');
+        $query = '?'.http_build_query(['_token' => $token]);
+        $body = ['product_id' => $product->getId(), 'module_id' => $carrier->getId()];
+
+        $this->client->request('POST', '/admin/products/carrier/exclude'.$query, $body);
+        self::assertSame(0, $this->exclusionsOf($product, $carrier), 'The token is read from the request body only.');
+
+        $this->getService(ProductFacade::class)->excludeDeliveryModule((int) $product->getId(), (int) $carrier->getId());
+        $this->client->request('POST', '/admin/products/carrier/allow'.$query, $body);
+        self::assertSame(1, $this->exclusionsOf($product, $carrier), 'The token is read from the request body only.');
+    }
+
+    public function testAnAdministratorWhoMayOnlyLookCannotExcludeNorAllowACarrier(): void
+    {
+        $this->assertTheCarrierRoutesAreRefusedTo([AdminResources::PRODUCT => [AccessManager::VIEW]]);
+    }
+
+    public function testAnAdministratorWithoutTheCatalogueCannotExcludeNorAllowACarrier(): void
+    {
+        $this->assertTheCarrierRoutesAreRefusedTo([AdminResources::ORDER => [AccessManager::VIEW, AccessManager::CREATE, AccessManager::UPDATE, AccessManager::DELETE]]);
+    }
+
     public function testTheSheetWarnsWhenNoCarrierIsLeft(): void
     {
         $product = $this->product();
@@ -283,6 +325,32 @@ final class ProductShippingRulesTest extends WebIntegrationTestCase
         }
 
         self::assertSame(1, $this->sheet($product)->filter('[data-testid="product-every-carrier-excluded"]')->count(), 'A carrier for downloads alone does not ship this product.');
+    }
+
+    /**
+     * Both carrier routes, posted with a valid token by an administrator holding only the
+     * given rights: refused, and nothing changes.
+     *
+     * @param array<string, list<string>> $grants
+     */
+    private function assertTheCarrierRoutesAreRefusedTo(array $grants): void
+    {
+        $product = $this->product();
+        $carrier = $this->deliveryModule();
+        $token = $this->tokenOf($this->sheet($product), 'product-carrier-exclude-form');
+        $restricted = $this->factory->restrictedAdmin($grants);
+        $restricted->eraseCredentials();
+        $this->injector?->setAdmin($restricted);
+        $body = ['_token' => $token, 'product_id' => $product->getId(), 'module_id' => $carrier->getId()];
+
+        $this->client->request('POST', '/admin/products/carrier/exclude', $body);
+        self::assertSame(403, $this->client->getResponse()->getStatusCode(), 'Excluding a carrier is refused.');
+        self::assertSame(0, $this->exclusionsOf($product, $carrier));
+
+        $this->getService(ProductFacade::class)->excludeDeliveryModule((int) $product->getId(), (int) $carrier->getId());
+        $this->client->request('POST', '/admin/products/carrier/allow', $body);
+        self::assertSame(403, $this->client->getResponse()->getStatusCode(), 'Allowing a carrier again is refused.');
+        self::assertSame(1, $this->exclusionsOf($product, $carrier));
     }
 
     private function product(): Product
