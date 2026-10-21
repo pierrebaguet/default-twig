@@ -255,9 +255,11 @@ final readonly class DashboardStatsProvider
         if ($this->canView(AdminResources::CONTENT) && ($contents = $this->publications->countOverdueContents($now, $before)) > 0) {
             $alerts[] = [
                 'label' => $this->translator->trans(
+                    // A content also stays behind when the task runs and refuses it (empty body in
+                    // the default language): the label names both causes.
                     $contents === 1
-                        ? '%count% content has a scheduled date passed for over a day: is the content:publish-scheduled task running?'
-                        : '%count% contents have a scheduled date passed for over a day: is the content:publish-scheduled task running?',
+                        ? '%count% content has a scheduled date passed for over a day: the content:publish-scheduled task does not run, or refused to publish it.'
+                        : '%count% contents have a scheduled date passed for over a day: the content:publish-scheduled task does not run, or refused to publish them.',
                     ['%count%' => $contents],
                 ),
                 'count' => $contents,

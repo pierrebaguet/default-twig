@@ -28,6 +28,7 @@ use Thelia\Domain\CMS\Publication\PublicationStatus;
 use Thelia\Model\Content;
 use Thelia\Model\ContentI18nQuery;
 use Thelia\Model\Folder;
+use Thelia\Model\FolderQuery;
 use Thelia\Model\LangQuery;
 
 /**
@@ -112,6 +113,7 @@ final readonly class PublicationPanelBuilder
             'field_actions' => self::FIELD_ACTIONS,
             'date_placeholder' => 'YYYY-MM-DD HH:MM',
             'empty_body' => $isContent ? $this->emptyBodyLanguages($row) : null,
+            'default_folder_unreleased' => $isContent && $status->isPublished() && $this->defaultFolderIsUnreleased($row),
         ];
     }
 
@@ -173,7 +175,7 @@ final readonly class PublicationPanelBuilder
      * with no text. Only the default language stops the publication; the others are
      * pointed out without blocking.
      *
-     * @return array{languages: list<string>, default_language_empty: bool}
+     * @return array{languages: list<string>, default_language_empty: bool, default_language: ?string}
      */
     private function emptyBodyLanguages(Content $content): array
     {
@@ -185,15 +187,33 @@ final readonly class PublicationPanelBuilder
         $detector = new EmptyBodyDetector();
         $languages = [];
         $defaultEmpty = false;
+        $defaultLanguage = null;
         foreach (LangQuery::create()->filterByActive(true)->orderByPosition()->find() as $lang) {
             if (!$detector->isEmpty($bodies[(string) $lang->getLocale()] ?? null)) {
                 continue;
             }
 
             $languages[] = (string) $lang->getTitle();
-            $defaultEmpty = $defaultEmpty || 1 === (int) $lang->getByDefault();
+            if (1 === (int) $lang->getByDefault()) {
+                $defaultEmpty = true;
+                $defaultLanguage = (string) $lang->getTitle();
+            }
         }
 
-        return ['languages' => $languages, 'default_language_empty' => $defaultEmpty];
+        return ['languages' => $languages, 'default_language_empty' => $defaultEmpty, 'default_language' => $defaultLanguage];
+    }
+
+    /**
+     * Whether the default folder of the content is a draft or still scheduled: the core
+     * serves no page of a content in a folder that is not online yet, however the content
+     * is published (`ContentFolderPublicationRule`). A folder taken offline does not hide
+     * its contents.
+     */
+    private function defaultFolderIsUnreleased(Content $content): bool
+    {
+        $folder = FolderQuery::create()->findPk((int) $content->getDefaultFolderId());
+        $status = null === $folder ? null : $this->presenter->statusOf($folder);
+
+        return null !== $status && ($status->isDraft() || $status->isScheduled());
     }
 }
