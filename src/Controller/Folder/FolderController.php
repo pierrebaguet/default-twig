@@ -147,7 +147,7 @@ final class FolderController
             'folder' => $folder,
             'breadcrumb_path' => $this->folderRepository->buildBreadcrumbPath($this->folderRepository->find((int) $folder->getParent(), $uiLocale), $uiLocale),
             'preview_url' => $folder->getUrl($locale),
-            'preview_link' => $this->publicationPanels->previewLink($folder),
+            'preview_link' => $this->publicationPanels->previewLink($folder, $locale),
             'publication' => $this->publicationPanels->build($folder),
             'form' => $this->buildUpdateForm($folder, $locale)->createView(),
             'seo_form' => $this->buildSeoForm($folder, $locale)->createView(),
@@ -240,9 +240,8 @@ final class FolderController
             return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
         }
 
-        // With the publication of the core, the toggle publishes or unpublishes now: the
-        // dates follow the flag, so an unpublished folder does not read as a scheduled
-        // one whose date has passed.
+        // With the publication of the core, the toggle publishes or unpublishes now through
+        // the publication event, like the block of the sheet.
         $publication = $this->publicationSupport->isAvailable();
 
         return $this->action->tokenAction(

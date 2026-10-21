@@ -116,11 +116,12 @@ final readonly class PublicationPanelBuilder
     }
 
     /**
-     * The signed link to the page of the row, whatever its state, and when it expires.
+     * The signed link to the page of the row in the language being edited, whatever its
+     * state, and when it expires.
      *
      * @return array{url: string, expires_at: string}|null
      */
-    public function previewLink(Content|Folder $row): ?array
+    public function previewLink(Content|Folder $row, string $locale): ?array
     {
         if (null === $this->previewLinks || !$this->support->isAvailable()) {
             return null;
@@ -129,6 +130,7 @@ final readonly class PublicationPanelBuilder
         $link = $this->previewLinks->generate(PublicationPreview::of(
             $row instanceof Content ? PublicationPreview::CONTENT : PublicationPreview::FOLDER,
             (int) $row->getId(),
+            $locale,
         ));
 
         return ['url' => $link->url, 'expires_at' => $this->presenter->date($link->expiresAt)];
