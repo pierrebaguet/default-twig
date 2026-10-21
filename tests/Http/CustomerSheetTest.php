@@ -532,6 +532,13 @@ final class CustomerSheetTest extends WebIntegrationTestCase
         $this->injector->setAdmin($admin);
         $url = '/admin/customer/update?customer_id='.$customer->getId();
 
+        // A content or folder sheet opened earlier in the process (a test sorted before this one)
+        // leaves the static flag of the TheliaBlocks module on, and every later page then loads the
+        // editor and its languages: one query that has nothing to do with the customer sheet.
+        if (property_exists('TheliaBlocks\\TheliaBlocks', 'pageNeedTheliaBlockAssets')) {
+            \TheliaBlocks\TheliaBlocks::$pageNeedTheliaBlockAssets = false;
+        }
+
         $cold = QueryCounter::count(function () use ($url): void {
             $this->client->request('GET', $url);
         });
