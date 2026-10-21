@@ -83,9 +83,8 @@ final readonly class PublicationGestureAction
                 '%state%' => null === $status ? '' : $this->presenter->label($status),
             ]));
         } catch (PublicationException $exception) {
-            // The core wrote nothing. The body guard words its message for the user already;
-            // the date errors are English sentences the theme translates.
-            $this->flash('danger', $this->translator->trans($exception->getMessage()));
+            // The core wrote nothing, and words its message for the user in their language.
+            $this->flash('danger', $exception->getMessage());
         } catch (\Throwable $exception) {
             $this->errorRenderer->setup($this->translator->trans('Publication'), $exception->getMessage(), $form, $exception);
         }
