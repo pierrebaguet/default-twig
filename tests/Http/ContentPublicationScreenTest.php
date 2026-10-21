@@ -337,6 +337,49 @@ final class ContentPublicationScreenTest extends WebIntegrationTestCase
         self::assertStringContainsString('alert-secondary', (string) $mention->attr('class'));
     }
 
+    public function testAnOverdueContentWithAnEmptyBodyIsSaidBlockedNotForgotten(): void
+    {
+        $folder = $this->factory->folder();
+        $blocked = $this->contentIn($folder, 'scheduled', ['body' => '<p>&nbsp;</p>']);
+        $blocked->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
+        $forgotten = $this->contentIn($folder, 'scheduled');
+        $forgotten->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
+        $defaultLanguage = (string) LangQuery::create()->findOneByByDefault(1)?->getTitle();
+
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$blocked->getId());
+        $overdue = trim($crawler->filter('[data-testid="content-publication-overdue"]')->text());
+        self::assertSame('Publishing is blocked while the detailed description in '.$defaultLanguage.' is empty.', $overdue, 'The task runs and refuses it: the sheet names what blocks it.');
+
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$forgotten->getId());
+        self::assertStringContainsString('does not seem to run', $crawler->filter('[data-testid="content-publication-overdue"]')->text());
+    }
+
+    public function testAPublishedContentInAnUnreleasedFolderIsPointedOut(): void
+    {
+        $parent = $this->factory->folder();
+        $draftFolder = $this->folderIn($parent, 'draft');
+        $content = $this->contentIn($draftFolder, 'published');
+
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId());
+        self::assertSame(
+            'The default folder is not published: the page is not served until it is.',
+            trim($crawler->filter('[data-testid="content-publication-folder-unreleased"]')->text()),
+        );
+        self::assertSame('published', $crawler->filter('[data-testid="content-publication"]')->attr('data-publication-state'), 'The state of the content is unchanged.');
+
+        $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$draftFolder->getId());
+        self::assertSame(['published'], $this->rowStates($crawler, 'folder-contents'), 'The list keeps the badge of the content.');
+
+        $scheduledFolder = $this->folderIn($parent, 'scheduled');
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$this->contentIn($scheduledFolder, 'published')->getId());
+        self::assertCount(1, $crawler->filter('[data-testid="content-publication-folder-unreleased"]'), 'A scheduled folder is not online yet either.');
+
+        foreach (['published', 'unpublished'] as $state) {
+            $crawler = $this->client->request('GET', '/admin/content/update/'.$this->contentIn($this->folderIn($parent, $state), 'published')->getId());
+            self::assertCount(0, $crawler->filter('[data-testid="content-publication-folder-unreleased"]'), 'A '.$state.' folder serves its contents.');
+        }
+    }
+
     public function testDatesInTheWrongOrderAreRefused(): void
     {
         $content = $this->contentIn($this->factory->folder(), 'draft');
@@ -497,6 +540,7 @@ final class ContentPublicationScreenTest extends WebIntegrationTestCase
         $alert = $crawler->filter('[data-testid="dashboard-alert"]')->reduce(static fn (Crawler $node): bool => str_contains($node->text(), 'content:publish-scheduled'));
         self::assertCount(1, $alert, 'The contents left behind for over a day are reported, the folders are not.');
         self::assertStringStartsWith('1 content has', trim($alert->text()), 'A date passed two hours ago is not reported yet.');
+        self::assertStringContainsString('does not run, or refused to publish it', $alert->text(), 'The label does not take for granted that the task does not run.');
         $href = (string) $alert->attr('href');
         self::assertStringContainsString('folder_id='.$parent->getId(), $href);
         self::assertStringContainsString('publication_state=overdue', $href);

@@ -29,7 +29,18 @@
 
         {% if publication.overdue %}
             <div class="alert alert-warning small py-2 mb-2" role="status" data-testid="{{ type }}-publication-overdue">
-                {{ 'The date has passed and nothing applied it yet: the content:publish-scheduled task does not seem to run.'|trans }}
+                {% if publication.state == 'scheduled' and publication.empty_body and publication.empty_body.default_language_empty %}
+                    {# The scheduled task runs and refuses it: saying it does not run would send the merchant the wrong way. #}
+                    {{ 'Publishing is blocked while the detailed description in %language% is empty.'|trans({ '%language%': publication.empty_body.default_language }) }}
+                {% else %}
+                    {{ 'The date has passed and nothing applied it yet: the content:publish-scheduled task does not seem to run.'|trans }}
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% if publication.default_folder_unreleased|default(false) %}
+            <div class="alert alert-secondary small py-2 mb-2" role="status" data-testid="{{ type }}-publication-folder-unreleased">
+                {{ 'The default folder is not published: the page is not served until it is.'|trans }}
             </div>
         {% endif %}
 
