@@ -21,9 +21,14 @@ use BackOfficeDefaultTwigBundle\Repository\CustomerRepository;
 use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Repository\OrderReturnRepository;
 use BackOfficeDefaultTwigBundle\Repository\ProductRepository;
+use BackOfficeDefaultTwigBundle\Repository\PublicationRepository;
 use BackOfficeDefaultTwigBundle\Service\I18n\MoneyFormatter;
+use BackOfficeDefaultTwigBundle\Service\Listing\FolderListQuery;
 use BackOfficeDefaultTwigBundle\Service\Order\OrderAccess;
+use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStateFilter;
 use Propel\Runtime\ActiveQuery\Criteria;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Core\Security\AccessManager;
@@ -52,6 +57,12 @@ final readonly class DashboardStatsProvider
      * angry customer, whatever the eventual answer is.
      */
     private const RETURN_FOLLOWUP_HOURS = 48;
+    /**
+     * How long a publication or withdrawal date may stay past with nothing acting on it
+     * before the dashboard says so: the scheduled publication task runs every few minutes,
+     * a day behind means it does not run at all.
+     */
+    private const PUBLICATION_FOLLOWUP_HOURS = 24;
     private const RECENT_ORDERS_LIMIT = 8;
     private const TOP_PRODUCTS_LIMIT = 5;
     private const LOW_STOCK_LIMIT = 5;
@@ -69,6 +80,9 @@ final readonly class DashboardStatsProvider
         private PeriodOptions $periodOptions,
         private OrderAccess $orderAccess,
         private MoneyFormatter $money,
+        private PublicationRepository $publications,
+        private ContentPublicationSupport $publicationSupport,
+        private ClockInterface $clock,
     ) {
     }
 
@@ -190,7 +204,7 @@ final readonly class DashboardStatsProvider
         $alerts = [];
 
         if (!$canViewOrders) {
-            return $this->appendReturnAlert($alerts);
+            return $this->appendPublicationAlerts($this->appendReturnAlert($alerts));
         }
 
         $unpaid = $this->orders->countUnpaidOlderThan(self::UNPAID_FOLLOWUP_HOURS);
@@ -215,7 +229,60 @@ final readonly class DashboardStatsProvider
             ];
         }
 
-        return $this->appendReturnAlert($alerts);
+        return $this->appendPublicationAlerts($this->appendReturnAlert($alerts));
+    }
+
+    /**
+     * The contents and folders whose publication or withdrawal date passed more than a
+     * day ago with nothing acting on it, a sign the scheduled publication task does not
+     * run. The link opens the list that holds the one waiting the longest, filtered on the
+     * rows in that case. Two indexed count queries, only on a core with the publication.
+     *
+     * @param list<array{label: string, count: int, href: ?string, icon: string, level: string}> $alerts
+     *
+     * @return list<array{label: string, count: int, href: ?string, icon: string, level: string}>
+     */
+    private function appendPublicationAlerts(array $alerts): array
+    {
+        if (!$this->publicationSupport->isAvailable()) {
+            return $alerts;
+        }
+
+        $now = $this->clock->now();
+        $before = $now->modify(\sprintf('-%d hours', self::PUBLICATION_FOLLOWUP_HOURS));
+        $filter = [FolderListQuery::PUBLICATION_STATE_PARAMETER => PublicationStateFilter::Overdue->value];
+
+        if ($this->canView(AdminResources::CONTENT) && ($contents = $this->publications->countOverdueContents($now, $before)) > 0) {
+            $alerts[] = [
+                'label' => $this->translator->trans(
+                    $contents === 1
+                        ? '%count% content has a scheduled date passed for over a day: is the content:publish-scheduled task running?'
+                        : '%count% contents have a scheduled date passed for over a day: is the content:publish-scheduled task running?',
+                    ['%count%' => $contents],
+                ),
+                'count' => $contents,
+                'href' => $this->urls->generate('admin.folders.default', ['folder_id' => (int) $this->publications->folderOfTheOldestOverdueContent($now, $before)] + $filter),
+                'icon' => 'bi-clock-history',
+                'level' => 'warning',
+            ];
+        }
+
+        if ($this->canView(AdminResources::FOLDER) && ($folders = $this->publications->countOverdueFolders($now, $before)) > 0) {
+            $alerts[] = [
+                'label' => $this->translator->trans(
+                    $folders === 1
+                        ? '%count% folder has a scheduled date passed for over a day: is the content:publish-scheduled task running?'
+                        : '%count% folders have a scheduled date passed for over a day: is the content:publish-scheduled task running?',
+                    ['%count%' => $folders],
+                ),
+                'count' => $folders,
+                'href' => $this->urls->generate('admin.folders.default', ['folder_id' => (int) $this->publications->parentOfTheOldestOverdueFolder($now, $before)] + $filter),
+                'icon' => 'bi-clock-history',
+                'level' => 'warning',
+            ];
+        }
+
+        return $alerts;
     }
 
     /**
