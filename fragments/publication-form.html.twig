@@ -1,0 +1,11 @@
+{#
+  The form the fields of the publication block post with (publication-panel.html.twig).
+  Rendered outside the general form of the sheet: forms do not nest.
+
+  Parameters:
+    publication - built by PublicationPanelBuilder::build()
+#}
+{% form_theme publication.form with bo_form_themes only %}
+<form id="{{ publication.type }}-publication-form" method="post" action="{{ publication.action_url }}" data-testid="{{ publication.type }}-publication-form">
+    {{ form_widget(publication.form._token) }}
+</form>

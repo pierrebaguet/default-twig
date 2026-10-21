@@ -46,11 +46,16 @@ final class ContentType extends AbstractType
             ])
             ->add('locale', HiddenType::class, [
                 'constraints' => [new NotBlank()],
-            ])
-            ->add('visible', CheckboxType::class, [
+            ]);
+
+        // A core with the publication of contents and folders gives the state its own
+        // block: the online checkbox is only left on a core without it.
+        if ($options['include_visible']) {
+            $builder->add('visible', CheckboxType::class, [
                 'required' => false,
                 'label' => $this->translator->trans('This content is online'),
             ]);
+        }
 
         if ($options['include_id']) {
             $builder->add('id', HiddenType::class, [
@@ -69,8 +74,9 @@ final class ContentType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver
-            ->setDefaults(['include_id' => false, 'include_description' => false, 'csrf_token_id' => 'admin.content'])
+            ->setDefaults(['include_id' => false, 'include_description' => false, 'include_visible' => true, 'csrf_token_id' => 'admin.content'])
             ->setAllowedTypes('include_id', 'bool')
-            ->setAllowedTypes('include_description', 'bool');
+            ->setAllowedTypes('include_description', 'bool')
+            ->setAllowedTypes('include_visible', 'bool');
     }
 }

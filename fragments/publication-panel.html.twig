@@ -1,0 +1,90 @@
+{#
+  The publication block of a content or folder sheet, in place of the online checkbox:
+  the state with its dates, the gestures the state takes, and the dates the chosen
+  gesture asks for. It sits inside the general form of the sheet, so its fields belong
+  to their own form through the HTML form attribute: publication-form.html.twig renders
+  that form, outside the general one.
+
+  Parameters:
+    publication - built by PublicationPanelBuilder::build()
+#}
+{% set type = publication.type %}
+{% set form_id = type ~ '-publication-form' %}
+{% set publication_form = publication.form %}
+{% form_theme publication_form with bo_form_themes only %}
+<div class="card mb-3"
+     data-testid="{{ type }}-publication"
+     data-publication-state="{{ publication.state }}"
+     data-controller="bo-publication-form">
+    <div class="card-body">
+        <h2 class="h6 mb-2">{{ 'Publication'|trans }}</h2>
+        <p class="mb-2">
+            <span class="badge text-bg-{{ publication.badge_variant }}" data-testid="{{ type }}-publication-state">{{ publication.label }}</span>
+        </p>
+        <ul class="list-unstyled small text-muted mb-2" data-testid="{{ type }}-publication-dates">
+            {% for detail in publication.details %}
+                <li>{{ detail }}</li>
+            {% endfor %}
+        </ul>
+
+        {% if publication.overdue %}
+            <div class="alert alert-warning small py-2 mb-2" role="status" data-testid="{{ type }}-publication-overdue">
+                {{ 'The date has passed and nothing applied it yet: the content:publish-scheduled task does not seem to run.'|trans }}
+            </div>
+        {% endif %}
+
+        {% if publication.empty_body and publication.empty_body.languages %}
+            <div class="alert {{ publication.empty_body.default_language_empty ? 'alert-danger' : 'alert-secondary' }} small py-2 mb-2" role="status" data-testid="{{ type }}-publication-empty-body">
+                {% if publication.empty_body.default_language_empty %}
+                    {{ 'The detailed description is empty in the default language: the content cannot be published.'|trans }}
+                {% endif %}
+                {{ 'Empty detailed description in: %languages%'|trans({ '%languages%': publication.empty_body.languages|join(', ') }) }}
+            </div>
+        {% endif %}
+
+        <fieldset class="mb-2">
+            <legend class="form-label fs-6 mb-1">{{ 'Change the state'|trans }}</legend>
+            {% for choice in publication_form.action %}
+                <div class="form-check">
+                    {{ form_widget(choice, { attr: {
+                        class: 'form-check-input',
+                        form: form_id,
+                        'data-bo-publication-form-target': 'action',
+                        'data-action': 'bo-publication-form#update',
+                        'data-testid': type ~ '-publication-action-' ~ choice.vars.value,
+                    } }) }}
+                    {{ form_label(choice, null, { label_attr: { class: 'form-check-label' } }) }}
+                </div>
+            {% endfor %}
+            {% do publication_form.action.setRendered %}
+        </fieldset>
+
+        <div class="mb-2" data-bo-publication-form-target="field" data-publication-actions="{{ publication.field_actions.publish_at|join(' ') }}">
+            {{ form_label(publication_form.publish_at) }}
+            {{ form_widget(publication_form.publish_at, { attr: {
+                class: 'form-control',
+                form: form_id,
+                placeholder: publication.date_placeholder,
+                'data-bo-publication-form-target': 'publishAt',
+                'data-action': 'input->bo-publication-form#validate',
+                'data-testid': type ~ '-publication-publish-at',
+            } }) }}
+        </div>
+        <div class="mb-2" data-bo-publication-form-target="field" data-publication-actions="{{ publication.field_actions.unpublish_at|join(' ') }}">
+            {{ form_label(publication_form.unpublish_at) }}
+            {{ form_widget(publication_form.unpublish_at, { attr: {
+                class: 'form-control',
+                form: form_id,
+                placeholder: publication.date_placeholder,
+                'data-bo-publication-form-target': 'unpublishAt',
+                'data-action': 'input->bo-publication-form#validate',
+                'data-testid': type ~ '-publication-unpublish-at',
+            } }) }}
+            <div class="invalid-feedback" data-bo-publication-form-target="message" hidden>{{ 'The withdrawal date must come after the publication date.'|trans }}</div>
+        </div>
+
+        <button type="submit" form="{{ form_id }}" class="btn btn-outline-primary btn-sm" data-testid="{{ type }}-publication-submit">
+            <i class="bi bi-calendar-check" aria-hidden="true"></i> {{ 'Apply'|trans }}
+        </button>
+    </div>
+</div>

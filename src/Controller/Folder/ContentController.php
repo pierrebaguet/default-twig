@@ -21,11 +21,15 @@ use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormAction;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use BackOfficeDefaultTwigBundle\Service\Listing\FolderListQuery;
+use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationGestureAction;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationPanelBuilder;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Thelia\Core\Event\Content\ContentAddFolderEvent;
@@ -34,11 +38,13 @@ use Thelia\Core\Event\Content\ContentDeleteEvent;
 use Thelia\Core\Event\Content\ContentRemoveFolderEvent;
 use Thelia\Core\Event\Content\ContentToggleVisibilityEvent;
 use Thelia\Core\Event\Content\ContentUpdateEvent;
+use Thelia\Core\Event\Content\ContentUpdatePublicationEvent;
 use Thelia\Core\Event\TheliaEvents;
 use Thelia\Core\Event\UpdatePositionEvent;
 use Thelia\Core\Event\UpdateSeoEvent;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Domain\CMS\Publication\PublicationRequest;
 use Thelia\Model\Content;
 use Thelia\Model\ContentQuery;
 use Thelia\Model\LangQuery;
@@ -60,16 +66,21 @@ final class ContentController
         private readonly UrlGeneratorInterface $urls,
         private readonly EditLocaleResolver $editLocale,
         private readonly FolderRepository $folderRepository,
+        private readonly ContentPublicationSupport $publicationSupport,
+        private readonly PublicationPanelBuilder $publicationPanels,
+        private readonly PublicationGestureAction $publicationGesture,
     ) {
     }
 
     #[Route('/create', name: 'create', methods: ['POST'])]
     public function create(Request $request): Response
     {
+        // With the publication of the core, a new content starts as a draft: the online
+        // checkbox is gone from the creation form.
         $form = $this->formFactory->createNamed('thelia_content_creation', ContentType::class, [
             'locale' => $request->getLocale(),
             'visible' => true,
-        ], []);
+        ], ['include_visible' => !$this->publicationSupport->isAvailable()]);
 
         return $this->action->submit(
             resource: self::RESOURCE,
@@ -106,6 +117,8 @@ final class ContentController
             'content' => $content,
             'breadcrumb_path' => $this->folderRepository->buildBreadcrumbPath($this->folderRepository->find($content->getDefaultFolderId(), $uiLocale), $uiLocale),
             'preview_url' => $content->getUrl($locale),
+            'preview_link' => $this->publicationPanels->previewLink($content),
+            'publication' => $this->publicationPanels->build($content),
             'form' => $this->buildUpdateForm($content, $locale)->createView(),
             'seo_form' => $this->buildSeoForm($content, $locale)->createView(),
             'folders' => $this->folderChoices($locale),
@@ -122,6 +135,7 @@ final class ContentController
         $form = $this->formFactory->createNamed('thelia_content_modification', ContentType::class, null, [
             'include_id' => true,
             'include_description' => true,
+            'include_visible' => !$this->publicationSupport->isAvailable(),
         ]);
 
         $contentId = (int) $request->request->get('content_id', 0);
@@ -138,6 +152,31 @@ final class ContentController
             successParameters: $closeAfterSave ? [] : ['content_id' => $contentId],
             renderError: fn (): RedirectResponse => new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['content_id' => $contentId])),
             successParametersResolver: $closeAfterSave ? static fn (ContentUpdateEvent $event): array => ['folder_id' => (int) $event->getDefaultFolder()] : null,
+        );
+    }
+
+    /**
+     * The gesture of the publication block of the sheet: publish, schedule, cancel,
+     * unpublish, schedule the withdrawal. 404 on a core without the publication.
+     */
+    #[Route('/publication/{content_id}', name: 'publication', methods: ['POST'], requirements: ['content_id' => '\d+'])]
+    public function publication(int $content_id): Response
+    {
+        if (!$this->publicationSupport->isAvailable()) {
+            throw new NotFoundHttpException();
+        }
+
+        $content = ContentQuery::create()->findPk($content_id);
+        $form = $content === null ? null : $this->publicationPanels->form($content);
+        if ($content === null || $form === null) {
+            return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
+        }
+
+        return $this->publicationGesture->apply(
+            self::RESOURCE,
+            $content,
+            $form,
+            $this->urls->generate(self::EDIT_ROUTE, ['content_id' => $content_id]),
         );
     }
 
@@ -176,12 +215,19 @@ final class ContentController
 
         $folderId = (int) ($request->query->get('folder_id') ?? $content->getDefaultFolderId());
 
+        // With the publication of the core, the toggle publishes or unpublishes now: the
+        // dates follow the flag, so an unpublished content does not read as a scheduled
+        // one whose date has passed. Putting a content online goes through the body guard.
+        $publication = $this->publicationSupport->isAvailable();
+
         return $this->action->tokenAction(
             resource: self::RESOURCE,
             access: AccessManager::UPDATE,
             request: $request,
-            event: new ContentToggleVisibilityEvent($content),
-            eventName: TheliaEvents::CONTENT_TOGGLE_VISIBILITY,
+            event: $publication
+                ? new ContentUpdatePublicationEvent($content, $content->getVisible() ? PublicationRequest::unpublish() : PublicationRequest::publish())
+                : new ContentToggleVisibilityEvent($content),
+            eventName: $publication ? TheliaEvents::CONTENT_UPDATE_PUBLICATION : TheliaEvents::CONTENT_TOGGLE_VISIBILITY,
             actionLabel: 'Content visibility',
             successRoute: self::LIST_ROUTE,
             successParameters: FolderListQuery::fromRequest($request)->toListParams($folderId),
@@ -280,7 +326,7 @@ final class ContentController
         $event->setLocale((string) ($data['locale'] ?? $this->defaultLocale()))
             ->setTitle((string) ($data['title'] ?? ''))
             ->setDefaultFolder((int) ($data['default_folder'] ?? 0))
-            ->setVisible((bool) ($data['visible'] ?? false));
+            ->setVisible($validated->has('visible') && (bool) ($data['visible'] ?? false));
 
         return $event;
     }
@@ -294,7 +340,11 @@ final class ContentController
         $event->setLocale((string) ($data['locale'] ?? $this->defaultLocale()));
         $event->setTitle((string) ($data['title'] ?? ''));
         $event->setDefaultFolder((int) ($data['default_folder'] ?? 0));
-        $event->setVisible((bool) ($data['visible'] ?? false));
+        // The update event writes the flag it carries, whatever it is: without the checkbox
+        // (the publication block owns the state) it carries the one the content has.
+        $event->setVisible($validated->has('visible')
+            ? (bool) ($data['visible'] ?? false)
+            : 1 === (int) ContentQuery::create()->findPk((int) ($data['id'] ?? 0))?->getVisible());
         $event->setChapo($this->stringOrNull($data['chapo'] ?? null));
         $event->setDescription($this->stringOrNull($data['description'] ?? null));
         $event->setPostscriptum($this->stringOrNull($data['postscriptum'] ?? null));
@@ -316,6 +366,7 @@ final class ContentController
         ], [
             'include_id' => true,
             'include_description' => true,
+            'include_visible' => !$this->publicationSupport->isAvailable(),
         ]);
     }
 

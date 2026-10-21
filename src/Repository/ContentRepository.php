@@ -14,10 +14,12 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Repository;
 
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStateFilter;
 use Propel\Runtime\Collection\ObjectCollection;
 use Thelia\Model\Content;
 use Thelia\Model\ContentQuery;
 use Thelia\Model\Map\ContentFolderTableMap;
+use Thelia\Model\Map\ContentTableMap;
 
 final readonly class ContentRepository
 {
@@ -28,20 +30,28 @@ final readonly class ContentRepository
     public const FOLDER_POSITION_COLUMN = 'folder_position';
 
     /**
+     * @param PublicationStateFilter|null $state narrows the page to one publication state,
+     *                                           read at `$now`; only asked on a core that has them
+     *
      * @return ObjectCollection<int, Content>
      */
-    public function findInFolderPage(int $folderId, string $locale, int $offset, int $limit): ObjectCollection
+    public function findInFolderPage(int $folderId, string $locale, int $offset, int $limit, ?PublicationStateFilter $state = null, ?\DateTimeInterface $now = null): ObjectCollection
     {
-        /** @var ObjectCollection<int, Content> $contents */
-        $contents = ContentQuery::create()
+        $query = ContentQuery::create()
             ->useContentFolderQuery()
                 ->filterByFolderId($folderId)
                 ->orderByPosition()
             ->endUse()
             ->withColumn(ContentFolderTableMap::COL_POSITION, self::FOLDER_POSITION_COLUMN)
             ->offset($offset)
-            ->limit($limit)
-            ->find();
+            ->limit($limit);
+
+        if (null !== $state) {
+            PublicationStateCriteria::apply($query, ContentTableMap::TABLE_NAME, $state, $now ?? new \DateTimeImmutable());
+        }
+
+        /** @var ObjectCollection<int, Content> $contents */
+        $contents = $query->find();
 
         foreach ($contents as $content) {
             $content->setLocale($locale);
@@ -50,12 +60,17 @@ final readonly class ContentRepository
         return $contents;
     }
 
-    public function countInFolder(int $folderId): int
+    public function countInFolder(int $folderId, ?PublicationStateFilter $state = null, ?\DateTimeInterface $now = null): int
     {
-        return ContentQuery::create()
+        $query = ContentQuery::create()
             ->useContentFolderQuery()
                 ->filterByFolderId($folderId)
-            ->endUse()
-            ->count();
+            ->endUse();
+
+        if (null !== $state) {
+            PublicationStateCriteria::apply($query, ContentTableMap::TABLE_NAME, $state, $now ?? new \DateTimeImmutable());
+        }
+
+        return $query->count();
     }
 }

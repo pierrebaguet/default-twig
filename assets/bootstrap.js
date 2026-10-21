@@ -54,6 +54,7 @@ import BoPrintIframeController from './controllers/bo-print-iframe_controller.js
 import BoProductFeatureBatchController from './controllers/bo-product-feature-batch_controller.js';
 import BoPseAssocPickerController from './controllers/bo-pse-assoc-picker_controller.js';
 import BoPsePriceWithTaxController from './controllers/bo-pse-price-with-tax_controller.js';
+import BoPublicationFormController from './controllers/bo-publication-form_controller.js';
 import BoRangeSliderController from './controllers/bo-range-slider_controller.js';
 import BoSaleProductAttributesController from './controllers/bo-sale-product-attributes_controller.js';
 import BoSaleProductPickerController from './controllers/bo-sale-product-picker_controller.js';
@@ -126,6 +127,7 @@ app.register('bo-print-iframe', BoPrintIframeController);
 app.register('bo-product-feature-batch', BoProductFeatureBatchController);
 app.register('bo-pse-assoc-picker', BoPseAssocPickerController);
 app.register('bo-pse-price-with-tax', BoPsePriceWithTaxController);
+app.register('bo-publication-form', BoPublicationFormController);
 app.register('bo-range-slider', BoRangeSliderController);
 app.register('bo-sale-product-attributes', BoSaleProductAttributesController);
 app.register('bo-sale-product-picker', BoSaleProductPickerController);

@@ -1,0 +1,28 @@
+{#
+  The preview buttons of a content or folder sheet. With the publication of the core,
+  the link is signed: it opens the page whatever its state, for anyone holding it, until
+  it expires; the copy button hands it out. On a core without it, the plain link to the
+  page.
+
+  Parameters:
+    type         - 'content' or 'folder', prefix of the data-testid attributes
+    preview_link - {url, expires_at} from PublicationPanelBuilder::previewLink(), or null
+    preview_url  - the plain url of the page, used when preview_link is null
+    title        - the title attribute of the preview button
+#}
+{% if preview_link %}
+    <div class="d-flex flex-wrap align-items-center gap-2" data-controller="bo-copy-to-clipboard" data-bo-copy-to-clipboard-copied-label-value="{{ 'Copied'|trans }}">
+        <a href="{{ preview_link.url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary flex-shrink-0" title="{{ title }}" data-testid="{{ type }}-preview-btn">
+            <i class="bi bi-eye" aria-hidden="true"></i> {{ 'Preview'|trans }}
+        </a>
+        <textarea class="visually-hidden" readonly tabindex="-1" aria-hidden="true" data-bo-copy-to-clipboard-target="source">{{ preview_link.url }}</textarea>
+        <button type="button" class="btn btn-outline-secondary flex-shrink-0" data-action="bo-copy-to-clipboard#copy" data-testid="{{ type }}-preview-copy">
+            <i class="bi bi-clipboard" aria-hidden="true"></i> {{ 'Copy the link'|trans }}
+        </button>
+        <span class="small text-muted" data-testid="{{ type }}-preview-expiry">{{ 'Link valid until %date%'|trans({ '%date%': preview_link.expires_at }) }}</span>
+    </div>
+{% elseif preview_url %}
+    <a href="{{ preview_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary flex-shrink-0" title="{{ title }}" data-testid="{{ type }}-preview-btn">
+        <i class="bi bi-eye" aria-hidden="true"></i> {{ 'Preview'|trans }}
+    </a>
+{% endif %}

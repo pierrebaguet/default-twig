@@ -41,16 +41,43 @@
 
         {{ safe_hook('folders.caption', { location: 'folder_list_caption' }) }}
 
+        {% if publication_enabled|default(false) %}
+            <form method="get" action="{{ path('admin.folders.default') }}" class="row g-2 mb-3" data-testid="folders-publication-filter-form">
+                {# Filtering must not silently reset the folder or the column the merchant sorted on. #}
+                {% if parent_id > 0 %}
+                    <input type="hidden" name="folder_id" value="{{ parent_id }}">
+                {% endif %}
+                <input type="hidden" name="order" value="{{ sort_field }}">
+                <input type="hidden" name="direction" value="{{ sort_direction }}">
+                <div class="col-md-4">
+                    <label class="form-label" for="folders-publication-filter">{{ 'Filter by publication state'|trans }}</label>
+                    <select name="publication_state" id="folders-publication-filter" class="form-select" data-testid="folders-publication-filter">
+                        {% for choice in publication_state_choices %}
+                            <option value="{{ choice.value }}" {% if choice.value == (publication_state ?? '') %}selected{% endif %}>{{ choice.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary" type="submit" data-testid="folders-publication-filter-submit">{{ 'Filter'|trans }}</button>
+                </div>
+            </form>
+        {% endif %}
+
+        {% set publication_column = publication_enabled|default(false)
+            ? [column_badge('publication_badge', 'Publication'|trans, publication_badge_variants, 'start', labelKey: 'publication_label')]
+            : [] %}
+
         {{ component('BoDataTable', {
             id: 'folders',
             columns: [
                 column('id', 'ID'|trans, 'start', 'id', hideBelow: 'md'),
                 column_html('thumbnail_html', 'Image'|trans, 'center', hideBelow: 'md'),
                 column_html('title_html', 'Title'|trans, 'start', 'title'),
+            ]|merge(publication_column)|merge([
                 column_toggle('visible', 'Online'|trans, 'toggle_visible_url', 'center', 'bi-check-circle-fill text-success', 'bi-circle text-secondary', 'visible'),
                 column_position('position', 'Position'|trans, 'center', 'position', hideBelow: 'lg'),
                 column_actions('_actions', 'Actions'|trans),
-            ],
+            ]),
             rows: rows,
             emptyMessage: 'No subfolder yet.'|trans,
             extraColumnsHeaderHook: 'folders.header',
@@ -60,7 +87,7 @@
             rowHookArgs: { folder_id: 'id' },
             sortField: sort_field,
             sortDirection: sort_direction,
-            sortKeepParams: { folder_id: parent_id ?: null },
+            sortKeepParams: { folder_id: parent_id ?: null, publication_state: publication_state|default(null) },
             tbodyAttributes: {
                 'data-controller': 'bo-sortable bo-position',
                 'data-bo-sortable-url-value': update_position_url,
@@ -94,10 +121,11 @@
                         column('id', 'ID'|trans, 'start', hideBelow: 'md'),
                         column_html('thumbnail_html', 'Image'|trans, 'center', hideBelow: 'md'),
                         column_html('title_html', 'Title'|trans, 'start'),
+                    ]|merge(publication_column)|merge([
                         column_toggle('visible', 'Online'|trans, 'toggle_visible_url', 'center', 'bi-check-circle-fill text-success', 'bi-circle text-secondary', 'visible'),
                         column_position('position', 'Position'|trans, 'center', hideBelow: 'lg'),
                         column_actions('_actions', 'Actions'|trans),
-                    ],
+                    ]),
                     rows: content_rows,
                     emptyMessage: 'No content in this folder yet.'|trans,
                     extraColumnsHeaderHook: 'contents.header',
@@ -123,7 +151,7 @@
                         route: 'admin.folders.default',
                         currentPage: content_current_page,
                         lastPage: content_pages,
-                        routeParams: { folder_id: parent_id },
+                        routeParams: { folder_id: parent_id, publication_state: publication_state|default(null) },
                         pageParam: 'content_page',
                         ariaLabel: 'Folder contents pagination'|trans,
                         testid: 'folder-contents-pagination',
@@ -150,10 +178,14 @@
                             {{ form_widget(create_form.title, { attr: { class: 'form-control' } }) }}
                             {{ form_errors(create_form.title) }}
                         </div>
-                        <div class="form-check mb-3">
-                            {{ form_widget(create_form.visible, { attr: { class: 'form-check-input' } }) }}
-                            {{ form_label(create_form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
-                        </div>
+                        {% if create_form.visible is defined %}
+                            <div class="form-check mb-3">
+                                {{ form_widget(create_form.visible, { attr: { class: 'form-check-input' } }) }}
+                                {{ form_label(create_form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
+                            </div>
+                        {% else %}
+                            <p class="form-text mb-3" data-testid="folder-create-draft-note">{{ 'The folder is created as a draft: publish it from its sheet.'|trans }}</p>
+                        {% endif %}
                         {{ form_widget(create_form.locale) }}
                         {{ form_widget(create_form.parent) }}
                         {{ safe_hook('folder.create-form', { location: 'folder_create_form' }) }}
@@ -195,10 +227,14 @@
                                 {{ form_widget(content_create_form.title, { attr: { class: 'form-control' } }) }}
                                 {{ form_errors(content_create_form.title) }}
                             </div>
-                            <div class="form-check mb-3">
-                                {{ form_widget(content_create_form.visible, { attr: { class: 'form-check-input' } }) }}
-                                {{ form_label(content_create_form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
-                            </div>
+                            {% if content_create_form.visible is defined %}
+                                <div class="form-check mb-3">
+                                    {{ form_widget(content_create_form.visible, { attr: { class: 'form-check-input' } }) }}
+                                    {{ form_label(content_create_form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
+                                </div>
+                            {% else %}
+                                <p class="form-text mb-3" data-testid="content-create-draft-note">{{ 'The content is created as a draft: publish it from its sheet.'|trans }}</p>
+                            {% endif %}
                             {{ form_widget(content_create_form.locale) }}
                             {{ form_widget(content_create_form.default_folder) }}
                             {{ safe_hook('content.create-form', { location: 'content_create_form' }) }}
