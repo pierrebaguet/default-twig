@@ -448,6 +448,41 @@ final class ContentPublicationScreenTest extends WebIntegrationTestCase
         self::assertStringContainsString('/preview/folder/'.$folder->getId().'?', (string) $crawler->filter('[data-testid="folder-preview-btn"]')->attr('href'));
     }
 
+    public function testThePreviewLinkOpensThePageInTheLanguageBeingEdited(): void
+    {
+        $content = $this->contentIn($this->factory->folder(), 'draft');
+        $folder = $this->folderIn($this->factory->folder(), 'draft');
+
+        foreach (['en_US', 'fr_FR'] as $locale) {
+            $lang = LangQuery::create()->findOneByLocale($locale);
+            self::assertNotNull($lang);
+
+            $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId().'?edit_language_id='.$lang->getId());
+            self::assertStringContainsString('locale='.$locale, (string) $crawler->filter('[data-testid="content-preview-btn"]')->attr('href'), 'Content edited in '.$locale.'.');
+
+            $crawler = $this->client->request('GET', '/admin/folders/update/'.$folder->getId().'?edit_language_id='.$lang->getId());
+            self::assertStringContainsString('locale='.$locale, (string) $crawler->filter('[data-testid="folder-preview-btn"]')->attr('href'), 'Folder edited in '.$locale.'.');
+        }
+    }
+
+    public function testARefusedGestureIsWordedInTheLanguageOfTheAdministrator(): void
+    {
+        $french = LangQuery::create()->findOneByLocale('fr_FR');
+        self::assertNotNull($french);
+        $content = $this->contentIn($this->factory->folder(), 'draft');
+
+        // The message comes from the catalog of the core: the theme carries no copy of it.
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId().'?lang='.$french->getCode());
+        $form = $crawler->filter('[data-testid="content-publication-submit"]')->form();
+        $form['thelia_content_publication[action]'] = 'schedule';
+        $form['thelia_content_publication[publish_at]'] = '2020-01-01 10:00';
+        $this->client->submit($form);
+
+        $crawler = $this->client->followRedirect();
+        self::assertSame('La date de publication doit être dans le futur.', trim($crawler->filter('[data-testid="bo-flash-danger"]')->text()));
+        self::assertNull($this->reloaded($content)->getPublishAt());
+    }
+
     public function testTheDashboardWarnsWhenScheduledDatesAreLeftBehind(): void
     {
         $parent = $this->factory->folder();
