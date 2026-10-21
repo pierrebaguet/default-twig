@@ -29,11 +29,12 @@
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
             <h1 class="h3 mb-0">{{ 'Folder'|trans }} <small class="text-muted">#{{ folder.id }}</small></h1>
             <div class="d-flex flex-wrap gap-2">
-                {% if preview_url is defined and preview_url %}
-                    <a href="{{ preview_url }}" target="_blank" rel="noopener" class="btn btn-outline-secondary flex-shrink-0" title="{{ 'Preview folder page'|trans }}" data-testid="folder-preview-btn">
-                        <i class="bi bi-eye" aria-hidden="true"></i> {{ 'Preview'|trans }}
-                    </a>
-                {% endif %}
+                {% include '@BackOfficeDefaultTwig/fragments/publication-preview.html.twig' with {
+                    type: 'folder',
+                    preview_link: preview_link|default(null),
+                    preview_url: preview_url|default(null),
+                    title: 'Preview folder page'|trans,
+                } only %}
                 <a href="{{ path('admin.folders.default', { folder_id: folder.parent }) }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left" aria-hidden="true"></i> {{ 'Back'|trans }}
                 </a>
@@ -113,10 +114,14 @@
                         </div>
                         <div class="col-md-4">
                             {{ safe_hook('folder.modification.form-right.top', { folder_id: folder.id }) }}
-                            <div class="form-check mb-3">
-                                {{ form_widget(form.visible, { attr: { class: 'form-check-input' } }) }}
-                                {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
-                            </div>
+                            {% if publication|default(null) %}
+                                {% include '@BackOfficeDefaultTwig/fragments/publication-panel.html.twig' with { publication: publication } only %}
+                            {% else %}
+                                <div class="form-check mb-3">
+                                    {{ form_widget(form.visible, { attr: { class: 'form-check-input' } }) }}
+                                    {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
+                                </div>
+                            {% endif %}
                             <div class="mb-3">
                                 {{ form_label(form.parent) }}
                                 {{ form_widget(form.parent, { attr: { class: 'form-control' } }) }}
@@ -149,6 +154,9 @@
                 {{ form_widget(form._token) }}
                 {# module fields added through the legacy form bridge are rendered by the module hooks, not auto-dumped #}
                 {{ form_end(form, {render_rest: false}) }}
+                {% if publication|default(null) %}
+                    {% include '@BackOfficeDefaultTwig/fragments/publication-form.html.twig' with { publication: publication } only %}
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'children' %}show active{% endif %}" id="tab-children" role="tabpanel">

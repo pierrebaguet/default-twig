@@ -24,13 +24,20 @@ use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormAction;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use BackOfficeDefaultTwigBundle\Service\Listing\FolderListQuery;
 use BackOfficeDefaultTwigBundle\Service\Listing\ListingThumbnailPresenter;
+use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationGestureAction;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationPanelBuilder;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStateFilter;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStatePresenter;
 use BackOfficeDefaultTwigBundle\UiComponents\DataTable\ListSort;
 use BackOfficeDefaultTwigBundle\UiComponents\DataTable\RowAction;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -38,11 +45,13 @@ use Thelia\Core\Event\Folder\FolderCreateEvent;
 use Thelia\Core\Event\Folder\FolderDeleteEvent;
 use Thelia\Core\Event\Folder\FolderToggleVisibilityEvent;
 use Thelia\Core\Event\Folder\FolderUpdateEvent;
+use Thelia\Core\Event\Folder\FolderUpdatePublicationEvent;
 use Thelia\Core\Event\TheliaEvents;
 use Thelia\Core\Event\UpdatePositionEvent;
 use Thelia\Core\Event\UpdateSeoEvent;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
+use Thelia\Domain\CMS\Publication\PublicationRequest;
 use Thelia\Model\Content;
 use Thelia\Model\Folder;
 use Thelia\Model\FolderQuery;
@@ -71,6 +80,11 @@ final class FolderController
         private readonly FolderRepository $folderRepository,
         private readonly ContentRepository $contentRepository,
         private readonly ListingThumbnailPresenter $thumbnails,
+        private readonly ContentPublicationSupport $publicationSupport,
+        private readonly PublicationPanelBuilder $publicationPanels,
+        private readonly PublicationGestureAction $publicationGesture,
+        private readonly PublicationStatePresenter $publicationStates,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -91,10 +105,12 @@ final class FolderController
     #[Route('/create', name: 'create', methods: ['POST'])]
     public function create(Request $request): Response
     {
+        // With the publication of the core, a new folder starts as a draft: the online
+        // checkbox is gone from the creation form.
         $form = $this->formFactory->createNamed('thelia_folder_creation', FolderType::class, [
             'locale' => $request->getLocale(),
             'visible' => true,
-        ], []);
+        ], ['include_visible' => !$this->publicationSupport->isAvailable()]);
 
         return $this->action->submit(
             resource: self::RESOURCE,
@@ -131,6 +147,8 @@ final class FolderController
             'folder' => $folder,
             'breadcrumb_path' => $this->folderRepository->buildBreadcrumbPath($this->folderRepository->find((int) $folder->getParent(), $uiLocale), $uiLocale),
             'preview_url' => $folder->getUrl($locale),
+            'preview_link' => $this->publicationPanels->previewLink($folder),
+            'publication' => $this->publicationPanels->build($folder),
             'form' => $this->buildUpdateForm($folder, $locale)->createView(),
             'seo_form' => $this->buildSeoForm($folder, $locale)->createView(),
             'current_tab' => (string) $request->query->get('current_tab', 'general'),
@@ -144,6 +162,7 @@ final class FolderController
         $form = $this->formFactory->createNamed('thelia_folder_modification', FolderType::class, null, [
             'include_id' => true,
             'include_description' => true,
+            'include_visible' => !$this->publicationSupport->isAvailable(),
         ]);
 
         $folderId = (int) $request->request->get('folder_id', 0);
@@ -160,6 +179,31 @@ final class FolderController
             successParameters: $closeAfterSave ? [] : ['folder_id' => $folderId],
             renderError: fn (): RedirectResponse => new RedirectResponse($this->urls->generate(self::EDIT_ROUTE, ['folder_id' => $folderId])),
             successParametersResolver: $closeAfterSave ? static fn (FolderUpdateEvent $event): array => ['folder_id' => (int) $event->getParent()] : null,
+        );
+    }
+
+    /**
+     * The gesture of the publication block of the sheet: publish, schedule, cancel,
+     * unpublish, schedule the withdrawal. 404 on a core without the publication.
+     */
+    #[Route('/publication/{folder_id}', name: 'publication', methods: ['POST'], requirements: ['folder_id' => '\d+'])]
+    public function publication(int $folder_id): Response
+    {
+        if (!$this->publicationSupport->isAvailable()) {
+            throw new NotFoundHttpException();
+        }
+
+        $folder = FolderQuery::create()->findPk($folder_id);
+        $form = $folder === null ? null : $this->publicationPanels->form($folder);
+        if ($folder === null || $form === null) {
+            return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
+        }
+
+        return $this->publicationGesture->apply(
+            self::RESOURCE,
+            $folder,
+            $form,
+            $this->urls->generate(self::EDIT_ROUTE, ['folder_id' => $folder_id]),
         );
     }
 
@@ -196,12 +240,19 @@ final class FolderController
             return new RedirectResponse($this->urls->generate(self::LIST_ROUTE));
         }
 
+        // With the publication of the core, the toggle publishes or unpublishes now: the
+        // dates follow the flag, so an unpublished folder does not read as a scheduled
+        // one whose date has passed.
+        $publication = $this->publicationSupport->isAvailable();
+
         return $this->action->tokenAction(
             resource: self::RESOURCE,
             access: AccessManager::UPDATE,
             request: $request,
-            event: new FolderToggleVisibilityEvent($folder),
-            eventName: TheliaEvents::FOLDER_TOGGLE_VISIBILITY,
+            event: $publication
+                ? new FolderUpdatePublicationEvent($folder, $folder->getVisible() ? PublicationRequest::unpublish() : PublicationRequest::publish())
+                : new FolderToggleVisibilityEvent($folder),
+            eventName: $publication ? TheliaEvents::FOLDER_UPDATE_PUBLICATION : TheliaEvents::FOLDER_TOGGLE_VISIBILITY,
             actionLabel: 'Folder visibility',
             successRoute: self::LIST_ROUTE,
             successParameters: FolderListQuery::fromRequest($request)->toListParams((int) $folder->getParent()),
@@ -253,7 +304,7 @@ final class FolderController
         $event->setLocale((string) ($data['locale'] ?? $this->defaultLocale()))
             ->setTitle((string) ($data['title'] ?? ''))
             ->setParent((int) ($data['parent'] ?? 0))
-            ->setVisible((bool) ($data['visible'] ?? false));
+            ->setVisible($validated->has('visible') && (bool) ($data['visible'] ?? false));
 
         return $event;
     }
@@ -265,7 +316,11 @@ final class FolderController
         $event->setLocale((string) ($data['locale'] ?? $this->defaultLocale()))
             ->setTitle((string) ($data['title'] ?? ''))
             ->setParent((int) ($data['parent'] ?? 0))
-            ->setVisible((bool) ($data['visible'] ?? false))
+            // The update event writes the flag it carries, whatever it is: without the checkbox
+            // (the publication block owns the state) it carries the one the folder has.
+            ->setVisible($validated->has('visible')
+                ? (bool) ($data['visible'] ?? false)
+                : 1 === (int) FolderQuery::create()->findPk((int) ($data['id'] ?? 0))?->getVisible())
             ->setChapo($this->stringOrNull($data['chapo'] ?? null))
             ->setDescription($this->stringOrNull($data['description'] ?? null))
             ->setPostscriptum($this->stringOrNull($data['postscriptum'] ?? null));
@@ -279,25 +334,29 @@ final class FolderController
     private function buildListContext(int $parentId, ?Request $request = null): array
     {
         $locale = $this->defaultLocale();
+        $publication = $this->publicationSupport->isAvailable();
         $listQuery = $request !== null
             ? FolderListQuery::fromRequest($request)
             : new FolderListQuery(new ListSort(FolderListQuery::DEFAULT_SORT, 'asc'), 1);
+        if (!$publication) {
+            $listQuery = $listQuery->withoutPublicationState();
+        }
         $sort = $listQuery->sort;
         $rows = [];
-        foreach ($this->folderRepository->findChildrenSorted($parentId, $locale, $sort->field, $sort->direction) as $folder) {
+        foreach ($this->folderRepository->findChildrenSorted($parentId, $locale, $sort->field, $sort->direction, $listQuery->publicationState, $this->clock->now()) as $folder) {
             $rows[] = $this->folderToRow($folder, $listQuery);
         }
 
         $createForm = $this->formFactory->createNamed('thelia_folder_creation', FolderType::class, [
             'locale' => $locale,
             'parent' => $parentId,
-        ], []);
+        ], ['include_visible' => !$publication]);
 
         $contentCreateForm = $this->formFactory->createNamed('thelia_content_creation', ContentType::class, [
             'locale' => $locale,
             'default_folder' => $parentId,
             'visible' => true,
-        ], []);
+        ], ['include_visible' => !$publication]);
 
         return [
             'rows' => $rows,
@@ -312,7 +371,24 @@ final class FolderController
             'sort_field' => $sort->field,
             'sort_direction' => $sort->direction,
             'list_query_params' => $listQuery->toQueryParams(),
+            'publication_enabled' => $publication,
+            'publication_state' => $listQuery->publicationState?->value,
+            'publication_state_choices' => $publication ? $this->publicationStateChoices() : [],
+            'publication_badge_variants' => PublicationStatePresenter::BADGE_VARIANTS,
         ] + $this->buildContentSection($parentId, $listQuery, $locale);
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function publicationStateChoices(): array
+    {
+        $choices = [['value' => '', 'label' => $this->translator->trans('All publication states')]];
+        foreach (PublicationStateFilter::cases() as $state) {
+            $choices[] = ['value' => $state->value, 'label' => $this->translator->trans($state->label())];
+        }
+
+        return $choices;
     }
 
     /**
@@ -321,7 +397,8 @@ final class FolderController
     private function buildContentSection(int $folderId, FolderListQuery $listQuery, string $locale): array
     {
         $page = $listQuery->contentPage;
-        $total = $folderId > 0 ? $this->contentRepository->countInFolder($folderId) : 0;
+        $now = $this->clock->now();
+        $total = $folderId > 0 ? $this->contentRepository->countInFolder($folderId, $listQuery->publicationState, $now) : 0;
         if ($total === 0) {
             return ['content_rows' => [], 'content_total' => 0, 'content_pages' => 0, 'content_current_page' => 1];
         }
@@ -330,7 +407,7 @@ final class FolderController
         $page = max(1, min($page, $pages));
 
         $rows = [];
-        foreach ($this->contentRepository->findInFolderPage($folderId, $locale, ($page - 1) * self::CONTENT_PAGE_SIZE, self::CONTENT_PAGE_SIZE) as $content) {
+        foreach ($this->contentRepository->findInFolderPage($folderId, $locale, ($page - 1) * self::CONTENT_PAGE_SIZE, self::CONTENT_PAGE_SIZE, $listQuery->publicationState, $now) as $content) {
             $rows[] = $this->contentToRow($content, $folderId, $listQuery);
         }
 
@@ -346,7 +423,7 @@ final class FolderController
         $title = (string) $content->getTitle();
         $editUrl = $this->urls->generate('admin.content.update', ['content_id' => $id]);
 
-        return [
+        return $this->withPublicationBadge($content, [
             'id' => $id,
             'thumbnail_html' => $this->thumbnails->forContent($id),
             'title' => $title,
@@ -364,6 +441,28 @@ final class FolderController
                 new RowAction(kind: 'edit', label: $this->translator->trans('Edit'), href: $editUrl, grantedAttribute: AccessManager::UPDATE, grantedSubject: AdminResources::CONTENT),
                 new RowAction(kind: 'delete', label: $this->translator->trans('Delete'), modalTarget: '#content-delete-modal', grantedAttribute: AccessManager::DELETE, grantedSubject: AdminResources::CONTENT, dataAttributes: ['content-id' => $id, 'content-label' => $title]),
             ],
+        ]);
+    }
+
+    /**
+     * The publication badge of a row: its variant key, its label with the date the state
+     * waits for, and the state on the row for a test or a script to find it.
+     *
+     * @param array<string, mixed> $row
+     *
+     * @return array<string, mixed>
+     */
+    private function withPublicationBadge(Content|Folder $model, array $row): array
+    {
+        $badge = $this->publicationStates->badge($model);
+        if ($badge === null) {
+            return $row;
+        }
+
+        return $row + [
+            'publication_badge' => $badge['badge'],
+            'publication_label' => $badge['label'],
+            '_attrs' => ['data-publication-state' => $badge['state']],
         ];
     }
 
@@ -381,7 +480,7 @@ final class FolderController
         $title = (string) $folder->getTitle();
         $browseUrl = $this->urls->generate(self::LIST_ROUTE, ['folder_id' => $id]);
 
-        return [
+        return $this->withPublicationBadge($folder, [
             'id' => $id,
             'thumbnail_html' => $this->thumbnails->forFolder($id),
             'title' => $title,
@@ -395,7 +494,7 @@ final class FolderController
             'children_url' => $browseUrl,
             'toggle_visible_url' => $this->urls->generate('admin.folders.toggle-online', ['folder_id' => $id] + $listQuery->toQueryParams()),
             '_actions' => $actions,
-        ];
+        ]);
     }
 
     private function buildUpdateForm(Folder $folder, string $locale): FormInterface
@@ -412,6 +511,7 @@ final class FolderController
         ], [
             'include_id' => true,
             'include_description' => true,
+            'include_visible' => !$this->publicationSupport->isAvailable(),
         ]);
     }
 
