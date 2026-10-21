@@ -117,7 +117,7 @@ final class ContentController
             'content' => $content,
             'breadcrumb_path' => $this->folderRepository->buildBreadcrumbPath($this->folderRepository->find($content->getDefaultFolderId(), $uiLocale), $uiLocale),
             'preview_url' => $content->getUrl($locale),
-            'preview_link' => $this->publicationPanels->previewLink($content),
+            'preview_link' => $this->publicationPanels->previewLink($content, $locale),
             'publication' => $this->publicationPanels->build($content),
             'form' => $this->buildUpdateForm($content, $locale)->createView(),
             'seo_form' => $this->buildSeoForm($content, $locale)->createView(),
@@ -215,9 +215,8 @@ final class ContentController
 
         $folderId = (int) ($request->query->get('folder_id') ?? $content->getDefaultFolderId());
 
-        // With the publication of the core, the toggle publishes or unpublishes now: the
-        // dates follow the flag, so an unpublished content does not read as a scheduled
-        // one whose date has passed. Putting a content online goes through the body guard.
+        // With the publication of the core, the toggle publishes or unpublishes now through
+        // the publication event, like the block of the sheet.
         $publication = $this->publicationSupport->isAvailable();
 
         return $this->action->tokenAction(
