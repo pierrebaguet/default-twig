@@ -236,7 +236,10 @@ final readonly class DashboardStatsProvider
      * The contents and folders whose publication or withdrawal date passed more than a
      * day ago with nothing acting on it, a sign the scheduled publication task does not
      * run. The link opens the list that holds the one waiting the longest, filtered on the
-     * rows in that case. Two indexed count queries, only on a core with the publication.
+     * rows in that case. Only on a core with the publication: one count query per type the
+     * admin may view, and one more for the link when the count is not zero. Each reads the
+     * publication date OR the withdrawal date, a condition that the index of either column
+     * does not serve alone: the database may combine both indexes or scan the table.
      *
      * @param list<array{label: string, count: int, href: ?string, icon: string, level: string}> $alerts
      *
