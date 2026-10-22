@@ -166,6 +166,12 @@ final class ContentController
             throw new NotFoundHttpException();
         }
 
+        // The right first: an admin who may not make the gesture learns nothing of the row,
+        // not even whether it exists.
+        if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
+            return $denied;
+        }
+
         $content = ContentQuery::create()->findPk($content_id);
         $form = $content === null ? null : $this->publicationPanels->form($content);
         if ($content === null || $form === null) {

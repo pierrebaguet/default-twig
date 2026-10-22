@@ -165,11 +165,16 @@
             </div>
 
             <div class="tab-pane fade {% if current_tab|default('') == 'images' %}show active{% endif %}" id="tab-images" role="tabpanel">
-                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'content', parentId: content.id })) }}
+                {# The media forms need the right to update: without it, the sheet is shown without them. #}
+                {% if is_granted('UPDATE', 'admin.content') %}
+                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'content', parentId: content.id })) }}
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab|default('') == 'documents' %}show active{% endif %}" id="tab-documents" role="tabpanel">
-                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'content', parentId: content.id })) }}
+                {% if is_granted('UPDATE', 'admin.content') %}
+                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'content', parentId: content.id })) }}
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab|default('') == 'seo' %}show active{% endif %}" id="tab-seo" role="tabpanel">

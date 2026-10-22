@@ -102,6 +102,15 @@ readonly class AdminAccessChecker
     }
 
     /**
+     * The same plain yes/no as {@see canView()}, on the right to change the resource: for a
+     * screen that offers a gesture only to an admin allowed to make it.
+     */
+    public function canUpdate(string $resource): bool
+    {
+        return $this->securityContext->isGranted([self::ADMIN_ROLE], [$resource], [], [AccessManager::UPDATE]);
+    }
+
+    /**
      * Grants access as soon as ONE of the resources is allowed (logical OR), unlike {@see check()}
      * which requires all of them. Used to bridge a renamed ACL resource with its legacy name during
      * the Smarty/Twig cohabitation.

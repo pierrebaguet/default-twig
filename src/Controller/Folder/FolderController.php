@@ -193,6 +193,12 @@ final class FolderController
             throw new NotFoundHttpException();
         }
 
+        // The right first: an admin who may not make the gesture learns nothing of the row,
+        // not even whether it exists.
+        if ($denied = $this->access->check(self::RESOURCE, [], AccessManager::UPDATE)) {
+            return $denied;
+        }
+
         $folder = FolderQuery::create()->findPk($folder_id);
         $form = $folder === null ? null : $this->publicationPanels->form($folder);
         if ($folder === null || $form === null) {
