@@ -15,10 +15,12 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Publication;
 
 use BackOfficeDefaultTwigBundle\Form\Publication\PublicationType;
+use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
+use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Domain\CMS\Publication\EmptyBodyDetector;
 use Thelia\Domain\CMS\Publication\Preview\PublicationPreview;
 use Thelia\Domain\CMS\Publication\Preview\PublicationPreviewLinkGenerator;
@@ -54,6 +56,7 @@ final readonly class PublicationPanelBuilder
         private FormFactoryInterface $formFactory,
         private UrlGeneratorInterface $urls,
         private TranslatorInterface $translator,
+        private AdminAccessChecker $access,
         private ?PublicationPreviewLinkGenerator $previewLinks = null,
     ) {
     }
@@ -119,13 +122,19 @@ final readonly class PublicationPanelBuilder
 
     /**
      * The signed link to the page of the row in the language being edited, whatever its
-     * state, and when it expires.
+     * state, and when it expires. Anyone holding it reads the page until then: only an
+     * admin allowed to update the contents (or the folders, for a folder) is handed one.
+     * Null otherwise, and the sheet keeps its plain link to the page.
      *
      * @return array{url: string, expires_at: string}|null
      */
     public function previewLink(Content|Folder $row, string $locale): ?array
     {
         if (null === $this->previewLinks || !$this->support->isAvailable()) {
+            return null;
+        }
+
+        if (!$this->access->canUpdate($row instanceof Content ? AdminResources::CONTENT : AdminResources::FOLDER)) {
             return null;
         }
 
