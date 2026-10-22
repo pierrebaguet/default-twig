@@ -43,7 +43,7 @@ final readonly class PublicationPanelBuilder
 {
     /**
      * Which gesture asks for which date. The block shows a date field only while a
-     * gesture that reads it is chosen.
+     * gesture that reads it is chosen, and the submission reads it only then.
      */
     public const array FIELD_ACTIONS = [
         'publish_at' => ['schedule'],

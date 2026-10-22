@@ -492,6 +492,7 @@ return [
     'The offered line is added to the cart on its own, and cannot be changed by the buyer.' => 'La ligne offerte est ajoutée au panier d\'elle-même, et l\'acheteur ne peut pas la modifier.',
     'The platforms a product video address may come from. An address from a platform left unticked is refused.' => 'Les plateformes dont peut provenir l\'adresse d\'une vidéo produit. Une adresse issue d\'une plateforme décochée est refusée.',
     'The prices and stocks of the sale unit have been saved.' => 'Les prix et stocks du point de vente ont été enregistrés.',
+    'The publication could not be updated. See the system log for the details.' => 'La publication n\'a pas pu être mise à jour. Consultez le journal système pour le détail.',
     'The sale price applies while the combination is on sale. Left empty next to a price, the sale unit sells at that price.' => 'Le prix promo s\'applique quand la déclinaison est en promotion. Laissé vide à côté d\'un prix, le point de vente vend à ce prix.',
     'The sale unit could not be saved. Please try again.' => 'Le point de vente n\'a pas pu être enregistré. Veuillez réessayer.',
     'The shop never restocks a returned item automatically.' => 'La boutique ne remet jamais un article retourné en stock automatiquement.',
