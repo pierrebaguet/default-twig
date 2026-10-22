@@ -14,10 +14,12 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Service\Publication;
 
+use BackOfficeDefaultTwigBundle\Form\Publication\PublicationType;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormErrorRenderer;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormValidator;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -31,6 +33,7 @@ use Thelia\Core\Event\TheliaEvents;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Domain\CMS\Publication\Exception\PublicationException;
 use Thelia\Domain\CMS\Publication\PublicationRequest;
+use Thelia\Form\Exception\FormValidationException;
 use Thelia\Model\Content;
 use Thelia\Model\Folder;
 
@@ -38,8 +41,9 @@ use Thelia\Model\Folder;
  * Applies the gesture the publication block of a sheet posts: permission to update,
  * the form (CSRF token, a gesture the current state takes), then the publication event
  * of the core. A gesture the core refuses (empty body, dates in the wrong order or in
- * the past) writes nothing and comes back as a danger message, translated; the user
- * lands back on the sheet either way.
+ * the past) writes nothing and comes back as a danger message, translated, like a form
+ * the validation refuses; any other failure is logged and shown as a plain message,
+ * never as the text of the exception. The user lands back on the sheet either way.
  */
 final readonly class PublicationGestureAction
 {
@@ -48,6 +52,7 @@ final readonly class PublicationGestureAction
         private AdminFormValidator $validator,
         private AdminFormErrorRenderer $errorRenderer,
         private AdminLogger $adminLogger,
+        private LoggerInterface $logger,
         private EventDispatcherInterface $events,
         private RequestStack $requestStack,
         private TranslatorInterface $translator,
@@ -63,10 +68,12 @@ final readonly class PublicationGestureAction
 
         try {
             $data = $this->validator->validate($form)->getData() ?? [];
+            $action = (string) ($data['action'] ?? '');
+            $status = $this->presenter->statusOf($row);
             $request = PublicationRequest::fromStrings(
-                (string) ($data['action'] ?? ''),
-                $this->stringOrNull($data['publish_at'] ?? null),
-                $this->stringOrNull($data['unpublish_at'] ?? null),
+                $action,
+                $this->date('publish_at', $action, $data, $status?->isScheduled() ? $status->publishAt : null),
+                $this->date('unpublish_at', $action, $data, $status?->isUnpublished() ? null : $status?->unpublishAt),
             );
 
             if ($row instanceof Content) {
@@ -85,8 +92,13 @@ final readonly class PublicationGestureAction
         } catch (PublicationException $exception) {
             // The core wrote nothing, and words its message for the user in their language.
             $this->flash('danger', $exception->getMessage());
-        } catch (\Throwable $exception) {
+        } catch (FormValidationException $exception) {
+            // The form words its first error for the user (expired token, gesture not offered).
             $this->errorRenderer->setup($this->translator->trans('Publication'), $exception->getMessage(), $form, $exception);
+        } catch (\Throwable $exception) {
+            // Not a refusal of the core: the text of the exception is for the log, not the user.
+            $this->logger->error('Publication gesture failed.', ['exception' => $exception, 'resource' => $resource, 'id' => (int) $row->getId()]);
+            $this->flash('danger', $this->translator->trans('The publication could not be updated. See the system log for the details.'));
         }
 
         return new RedirectResponse($sheetUrl);
@@ -100,8 +112,29 @@ final readonly class PublicationGestureAction
         }
     }
 
-    private function stringOrNull(mixed $value): ?string
+    /**
+     * The date a field carries, only when the gesture reads it: a field the block hides for
+     * that gesture may still hold an old or unreadable value, which must neither refuse the
+     * gesture nor be written. A date left as the block filled it in, to the minute, stands
+     * for the date the row has, seconds included, so moving the other date leaves it as it was.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function date(string $field, string $action, array $data, ?\DateTimeInterface $current): ?string
     {
-        return \is_string($value) && '' !== trim($value) ? $value : null;
+        if (!\in_array($action, PublicationPanelBuilder::FIELD_ACTIONS[$field], true)) {
+            return null;
+        }
+
+        $value = $data[$field] ?? null;
+        if (!\is_string($value) || '' === trim($value)) {
+            return null;
+        }
+
+        if (null !== $current && trim($value) === $current->format(PublicationType::DATE_FORMAT)) {
+            return $current->format('Y-m-d H:i:s');
+        }
+
+        return $value;
     }
 }

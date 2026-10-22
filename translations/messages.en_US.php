@@ -208,6 +208,7 @@ return [
     'The offered line is added to the cart on its own, and cannot be changed by the buyer.' => 'The offered line is added to the cart on its own, and cannot be changed by the buyer.',
     'The platforms a product video address may come from. An address from a platform left unticked is refused.' => 'The platforms a product video address may come from. An address from a platform left unticked is refused.',
     'The prices and stocks of the sale unit have been saved.' => 'The prices and stocks of the sale unit have been saved.',
+    'The publication could not be updated. See the system log for the details.' => 'The publication could not be updated. See the system log for the details.',
     'The sale price applies while the combination is on sale. Left empty next to a price, the sale unit sells at that price.' => 'The sale price applies while the combination is on sale. Left empty next to a price, the sale unit sells at that price.',
     'The sale unit could not be saved. Please try again.' => 'The sale unit could not be saved. Please try again.',
     'The SIRET number must contain 14 digits and its checksum must be valid.' => 'The SIRET number must contain 14 digits and its checksum must be valid.',
