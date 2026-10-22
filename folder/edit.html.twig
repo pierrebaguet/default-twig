@@ -116,7 +116,7 @@
                             {{ safe_hook('folder.modification.form-right.top', { folder_id: folder.id }) }}
                             {% if publication|default(null) %}
                                 {% include '@BackOfficeDefaultTwig/fragments/publication-panel.html.twig' with { publication: publication } only %}
-                            {% else %}
+                            {% elseif form.visible is defined %}
                                 <div class="form-check mb-3">
                                     {{ form_widget(form.visible, { attr: { class: 'form-check-input' } }) }}
                                     {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
@@ -163,21 +163,28 @@
                 <a href="{{ path('admin.folders.default', { folder_id: folder.id }) }}" class="btn btn-outline-primary mb-3">
                     <i class="bi bi-list" aria-hidden="true"></i> {{ 'Manage subfolders'|trans }}
                 </a>
+                {% set children_publication = publication_enabled|default(false) %}
                 {% set children_rows = [] %}
                 {% for child in children %}
                     {% set children_rows = children_rows|merge([{
                         'id': child.id,
                         'title_html': '<a href="' ~ child.edit_url ~ '">' ~ child.title|e ~ '</a>',
                         'visible_html': child.visible ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-muted"></i>',
+                        'publication_badge': child.publication_badge|default(null),
+                        'publication_label': child.publication_label|default(null),
+                        '_attrs': child._attrs|default({}),
                         'position': child.position,
                         '_actions': [ row_action('edit', 'Edit'|trans, child.edit_url) ],
                     }]) %}
                 {% endfor %}
+                {# With the publication of the core, the state of each subfolder as the folder list shows it; without it, the online icon. #}
                 {{ component('BoDataTable', {
                     id: 'folder-children-table',
                     columns: [
                         column_html('title_html', 'Title'|trans),
-                        column_html('visible_html', 'Online'|trans, 'center'),
+                        children_publication
+                            ? column_badge('publication_badge', 'Publication'|trans, publication_badge_variants, 'start', labelKey: 'publication_label')
+                            : column_html('visible_html', 'Online'|trans, 'center'),
                         column('position', 'Position'|trans, 'center', hideBelow: 'lg'),
                         column_actions(),
                     ],

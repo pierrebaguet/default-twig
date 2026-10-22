@@ -149,6 +149,9 @@ final class FolderController
             'preview_url' => $folder->getUrl($locale),
             'preview_link' => $this->publicationPanels->previewLink($folder, $locale),
             'publication' => $this->publicationPanels->build($folder),
+            'children' => $this->childRows($folder, $locale),
+            'publication_enabled' => $this->publicationSupport->isAvailable(),
+            'publication_badge_variants' => PublicationStatePresenter::BADGE_VARIANTS,
             'form' => $this->buildUpdateForm($folder, $locale)->createView(),
             'seo_form' => $this->buildSeoForm($folder, $locale)->createView(),
             'current_tab' => (string) $request->query->get('current_tab', 'general'),
@@ -500,6 +503,28 @@ final class FolderController
             'toggle_visible_url' => $this->urls->generate('admin.folders.toggle-online', ['folder_id' => $id] + $listQuery->toQueryParams()),
             '_actions' => $actions,
         ]);
+    }
+
+    /**
+     * The subfolders of the sheet, in their order, each with its publication badge on a
+     * core with the publication.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function childRows(Folder $folder, string $locale): array
+    {
+        $rows = [];
+        foreach ($this->folderRepository->findChildrenSorted((int) $folder->getId(), $locale, 'position', 'asc') as $child) {
+            $rows[] = $this->withPublicationBadge($child, [
+                'id' => (int) $child->getId(),
+                'title' => (string) $child->getTitle(),
+                'visible' => (bool) $child->getVisible(),
+                'position' => (int) $child->getPosition(),
+                'edit_url' => $this->urls->generate(self::EDIT_ROUTE, ['folder_id' => (int) $child->getId()]),
+            ]);
+        }
+
+        return $rows;
     }
 
     private function buildUpdateForm(Folder $folder, string $locale): FormInterface
