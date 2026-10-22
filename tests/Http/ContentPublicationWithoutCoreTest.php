@@ -16,10 +16,13 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use BackOfficeDefaultTwigBundle\BackOfficeDefaultTwigBundle;
 use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Event\TheliaEvents;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Content;
 use Thelia\Model\ContentQuery;
+use Thelia\Model\Folder;
+use Thelia\Model\FolderQuery;
 use Thelia\Test\FixtureFactory;
 use Thelia\Test\WebIntegrationTestCase;
 use Thelia\Tests\Support\BackOffice\AdminSessionInjector;
@@ -139,6 +142,76 @@ final class ContentPublicationWithoutCoreTest extends WebIntegrationTestCase
         self::assertSame(0, (int) $this->reloaded($content)->getVisible());
     }
 
+    public function testTheToggleOfTheListFallsBackOnTheVisibilityEvents(): void
+    {
+        $parent = $this->factory->folder();
+        $content = $this->factory->content($parent);
+        $child = $this->factory->folder((int) $parent->getId());
+
+        $dispatched = [];
+        $listener = static function (object $event, string $name) use (&$dispatched): void {
+            $dispatched[] = $name;
+        };
+        $dispatcher = $this->getService(EventDispatcherInterface::class);
+        $dispatcher->addListener(TheliaEvents::CONTENT_TOGGLE_VISIBILITY, $listener, 1000);
+        $dispatcher->addListener(TheliaEvents::FOLDER_TOGGLE_VISIBILITY, $listener, 1000);
+
+        try {
+            $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$parent->getId());
+            $token = (string) $crawler->filter('meta[name="bo-token"]')->attr('content');
+            foreach (['datatable-folder-contents-row' => $content->getId(), 'datatable-folders-row' => $child->getId()] as $row => $id) {
+                $toggle = $crawler->filter('[data-testid="'.$row.'"][data-row-id="'.$id.'"] a.bo-toggle');
+                self::assertCount(1, $toggle);
+                $this->client->request('POST', (string) $toggle->attr('href'), ['_token' => $token]);
+                self::assertResponseRedirects();
+            }
+        } finally {
+            $dispatcher->removeListener(TheliaEvents::CONTENT_TOGGLE_VISIBILITY, $listener);
+            $dispatcher->removeListener(TheliaEvents::FOLDER_TOGGLE_VISIBILITY, $listener);
+        }
+
+        self::assertSame([TheliaEvents::CONTENT_TOGGLE_VISIBILITY, TheliaEvents::FOLDER_TOGGLE_VISIBILITY], $dispatched, 'The toggle sends the visibility events the published core knows.');
+        self::assertSame(0, (int) $this->reloaded($content)->getVisible());
+        self::assertSame(0, (int) $this->reloadedFolder($child)->getVisible());
+    }
+
+    public function testTheFolderSheetAndTheFolderCreationKeepTheOnlineCheckbox(): void
+    {
+        $folder = $this->factory->folder();
+
+        $crawler = $this->client->request('GET', '/admin/folders/update/'.$folder->getId());
+        $form = $crawler->filter('[data-testid="folder-edit-top-save-stay"]')->form();
+        $form['thelia_folder_modification[visible]']->untick();
+        $this->client->submit($form);
+        self::assertSame(0, (int) $this->reloadedFolder($folder)->getVisible(), 'Unticked, the checkbox takes the folder offline.');
+
+        $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$folder->getId());
+        $form = $crawler->filter('[data-testid="folder-create-form"]')->form();
+        $form['thelia_folder_creation[title]'] = 'A folder created online';
+        $form['thelia_folder_creation[visible]']->tick();
+        $this->client->submit($form);
+
+        $created = FolderQuery::create()->useFolderI18nQuery()->filterByTitle('A folder created online')->endUse()->findOne();
+        self::assertNotNull($created);
+        self::assertSame(1, (int) $created->getVisible(), 'Ticked, the checkbox creates the folder online.');
+    }
+
+    public function testTheSubfoldersOfAFolderSheetKeepTheOnlineIcon(): void
+    {
+        $parent = $this->factory->folder();
+        $this->factory->folder((int) $parent->getId());
+        $this->factory->folder((int) $parent->getId(), ['visible' => 0]);
+
+        $crawler = $this->client->request('GET', '/admin/folders/update/'.$parent->getId().'?current_tab=children');
+        self::assertResponseIsSuccessful();
+
+        self::assertCount(2, $crawler->filter('[data-testid="datatable-folder-children-table-row"]'));
+        self::assertCount(0, $crawler->filter('[data-testid$="-cell-publication_badge"]'));
+        self::assertCount(0, $crawler->filter('[data-publication-state]'));
+        self::assertCount(1, $crawler->filter('[data-testid="datatable-folder-children-table"] .bi-check-circle'));
+        self::assertCount(1, $crawler->filter('[data-testid="datatable-folder-children-table"] .bi-x-circle'));
+    }
+
     public function testThePublicationRoutesAnswerNotFound(): void
     {
         $content = $this->factory->content($this->factory->folder(), ['visible' => 0]);
@@ -172,6 +245,15 @@ final class ContentPublicationWithoutCoreTest extends WebIntegrationTestCase
         if (method_exists($content, 'setPublishAt')) {
             $content->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
         }
+    }
+
+    private function reloadedFolder(Folder $folder): Folder
+    {
+        $reloaded = FolderQuery::create()->findPk($folder->getId());
+        self::assertNotNull($reloaded);
+        $reloaded->reload();
+
+        return $reloaded;
     }
 
     private function reloaded(Content $content): Content
