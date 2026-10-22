@@ -114,7 +114,7 @@
                                     {{ safe_hook('content.modification.form-right.top', { content_id: content.id }) }}
                                     {% if publication|default(null) %}
                                         {% include '@BackOfficeDefaultTwig/fragments/publication-panel.html.twig' with { publication: publication } only %}
-                                    {% else %}
+                                    {% elseif form.visible is defined %}
                                         <div class="form-check mb-3">
                                             {{ form_widget(form.visible, { attr: { class: 'form-check-input' } }) }}
                                             {{ form_label(form.visible, null, { label_attr: { class: 'form-check-label' } }) }}
