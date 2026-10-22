@@ -16,8 +16,13 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use BackOfficeDefaultTwigBundle\BackOfficeDefaultTwigBundle;
 use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStatePresenter;
 use Symfony\Component\DomCrawler\Crawler;
-use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Contracts\Translation\TranslatorInterface;
+use Thelia\Controller\Admin\AdminController;
+use Thelia\Core\Event\TheliaEvents;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Model\ConfigQuery;
@@ -544,6 +549,250 @@ final class ContentPublicationScreenTest extends WebIntegrationTestCase
         $href = (string) $alert->attr('href');
         self::assertStringContainsString('folder_id='.$parent->getId(), $href);
         self::assertStringContainsString('publication_state=overdue', $href);
+    }
+
+    public function testAFolderIsPublishedOnlyWithTheRightToUpdateAndAValidToken(): void
+    {
+        $folder = $this->folderIn($this->factory->folder(), 'draft');
+
+        $this->client->request('POST', '/admin/folders/publication/'.$folder->getId(), ['thelia_folder_publication' => ['action' => 'publish', '_token' => 'forged']]);
+        self::assertResponseRedirects('/admin/folders/update/'.$folder->getId());
+        self::assertSame(0, (int) $this->reloadedFolder($folder)->getVisible(), 'A forged token publishes nothing.');
+        self::assertStringContainsString('CSRF token is invalid', $this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]')->text(), 'The token is what refuses it.');
+
+        $reader = $this->factory->restrictedAdmin([AdminResources::CONTENT => [AccessManager::VIEW], AdminResources::FOLDER => [AccessManager::VIEW]]);
+        $reader->eraseCredentials();
+        $this->injector?->setAdmin($reader);
+
+        $this->client->request('POST', '/admin/folders/publication/'.$folder->getId(), ['thelia_folder_publication' => ['action' => 'publish']]);
+        self::assertResponseStatusCodeSame(403);
+        self::assertSame(0, (int) $this->reloadedFolder($folder)->getVisible());
+    }
+
+    public function testThePublicationRouteTellsAnAdminWhoMayNotUpdateNothingOfTheRow(): void
+    {
+        $content = $this->contentIn($this->factory->folder(), 'draft');
+        $folder = $this->folderIn($this->factory->folder(), 'draft');
+        $missingContent = (int) ContentQuery::create()->orderById('desc')->findOne()?->getId() + 1000;
+        $missingFolder = (int) FolderQuery::create()->orderById('desc')->findOne()?->getId() + 1000;
+
+        $reader = $this->factory->restrictedAdmin([AdminResources::CONTENT => [AccessManager::VIEW], AdminResources::FOLDER => [AccessManager::VIEW]]);
+        $reader->eraseCredentials();
+        $this->injector?->setAdmin($reader);
+
+        foreach ([
+            '/admin/content/publication/'.$content->getId() => 'thelia_content_publication',
+            '/admin/content/publication/'.$missingContent => 'thelia_content_publication',
+            '/admin/folders/publication/'.$folder->getId() => 'thelia_folder_publication',
+            '/admin/folders/publication/'.$missingFolder => 'thelia_folder_publication',
+        ] as $url => $formName) {
+            $this->client->request('POST', $url, [$formName => ['action' => 'publish']]);
+            self::assertResponseStatusCodeSame(403, $url.': a row that exists and one that does not answer the same.');
+        }
+    }
+
+    public function testOnlyAnAdminAllowedToUpdateIsHandedTheSignedPreviewLink(): void
+    {
+        $pages = [
+            'content' => '/admin/content/update/'.$this->contentIn($this->factory->folder(), 'draft')->getId(),
+            'folder' => '/admin/folders/update/'.$this->folderIn($this->factory->folder(), 'draft')->getId(),
+        ];
+
+        $reader = $this->factory->restrictedAdmin([AdminResources::CONTENT => [AccessManager::VIEW], AdminResources::FOLDER => [AccessManager::VIEW]]);
+        $reader->eraseCredentials();
+        $this->injector?->setAdmin($reader);
+
+        foreach ($pages as $type => $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertResponseIsSuccessful();
+            self::assertCount(0, $crawler->filter('[data-testid="'.$type.'-preview-copy"]'), $type.': no link to copy without the right to update.');
+            self::assertStringNotContainsString('_hash=', (string) $this->client->getResponse()->getContent(), $type.': no signed link anywhere in the page.');
+            self::assertStringNotContainsString('/preview/', (string) $crawler->filter('[data-testid="'.$type.'-preview-btn"]')->attr('href'), $type.': the button opens the page as the shop serves it.');
+        }
+
+        $editor = $this->factory->restrictedAdmin([
+            AdminResources::CONTENT => [AccessManager::VIEW, AccessManager::UPDATE],
+            AdminResources::FOLDER => [AccessManager::VIEW, AccessManager::UPDATE],
+        ]);
+        $editor->eraseCredentials();
+        $this->injector?->setAdmin($editor);
+
+        foreach ($pages as $type => $url) {
+            $crawler = $this->client->request('GET', $url);
+            self::assertCount(1, $crawler->filter('[data-testid="'.$type.'-preview-copy"]'), $type.': the right to update hands out the link.');
+            self::assertMatchesRegularExpression('#/preview/'.$type.'/\d+\?.*_hash=#', (string) $crawler->filter('[data-testid="'.$type.'-preview-btn"]')->attr('href'));
+        }
+    }
+
+    public function testAGestureReadsOnlyTheDatesItTakes(): void
+    {
+        $scheduled = $this->contentIn($this->factory->folder(), 'scheduled');
+
+        // A date the block hides for the gesture, left unreadable, neither refuses it nor is written.
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$scheduled->getId());
+        $form = $crawler->filter('[data-testid="content-publication-submit"]')->form();
+        $form['thelia_content_publication[action]'] = 'cancel';
+        $form['thelia_content_publication[publish_at]'] = 'not a date';
+        $form['thelia_content_publication[unpublish_at]'] = 'not a date either';
+        $this->client->submit($form);
+
+        $crawler = $this->client->followRedirect();
+        self::assertCount(0, $crawler->filter('[data-testid="bo-flash-danger"]'));
+        self::assertNull($this->reloaded($scheduled)->getPublishAt(), 'The scheduled publication is cancelled.');
+
+        $published = $this->contentIn($this->factory->folder(), 'published', ['unpublish_at' => '+30 days']);
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$published->getId());
+        $form = $crawler->filter('[data-testid="content-publication-submit"]')->form();
+        $form['thelia_content_publication[action]'] = 'unpublish';
+        $form['thelia_content_publication[unpublish_at]'] = 'not a date';
+        $this->client->submit($form);
+
+        self::assertSame(0, (int) $this->reloaded($published)->getVisible(), 'The content is unpublished.');
+    }
+
+    public function testMovingTheWithdrawalOfAScheduledContentKeepsItsPublicationToTheSecond(): void
+    {
+        $content = $this->contentIn($this->factory->folder(), 'scheduled');
+        $content->setPublishAt(new \DateTimeImmutable('2031-06-15 10:00:45'))->save($this->getPropelConnection());
+
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId());
+        $form = $crawler->filter('[data-testid="content-publication-submit"]')->form();
+        self::assertSame('2031-06-15 10:00', $form['thelia_content_publication[publish_at]']->getValue(), 'The block fills the date in to the minute.');
+        $form['thelia_content_publication[action]'] = 'schedule';
+        $form['thelia_content_publication[unpublish_at]'] = '2031-07-01 18:00';
+        $this->client->submit($form);
+
+        $content = $this->reloaded($content);
+        self::assertSame('2031-06-15 10:00:45', $content->getPublishAt('Y-m-d H:i:s'), 'The publication date left as it was keeps its seconds.');
+        self::assertSame('2031-07-01 18:00:00', $content->getUnpublishAt('Y-m-d H:i:s'));
+    }
+
+    public function testTheSubfoldersOfAFolderSheetCarryTheirState(): void
+    {
+        $parent = $this->factory->folder();
+        $this->folderIn($parent, 'draft');
+        $this->folderIn($parent, 'scheduled');
+        $this->folderIn($parent, 'published');
+
+        $crawler = $this->client->request('GET', '/admin/folders/update/'.$parent->getId().'?current_tab=children');
+        self::assertResponseIsSuccessful();
+
+        self::assertSame(['draft', 'scheduled', 'published'], $this->rowStates($crawler, 'folder-children-table'));
+        self::assertSame(
+            ['Draft', 'Scheduled for', 'Published'],
+            array_map(
+                static fn (string $label): string => str_starts_with($label, 'Scheduled for') ? 'Scheduled for' : $label,
+                $crawler->filter('[data-testid="datatable-folder-children-table-cell-publication_badge"] .badge')->each(static fn (Crawler $badge): string => trim($badge->text())),
+            ),
+            'The badge names the state, as the folder list does.',
+        );
+        self::assertCount(0, $crawler->filter('[data-testid="datatable-folder-children-table"] .bi-x-circle'), 'The online icon gives way to the badge.');
+    }
+
+    public function testASheetWhoseStateCannotBeReadStillRenders(): void
+    {
+        // The core carries the publication, but the state of the row is not read (no
+        // publication service): the sheet has neither the block nor the checkbox.
+        static::getContainer()->set(PublicationStatePresenter::class, new PublicationStatePresenter(
+            new ContentPublicationSupport(),
+            $this->getService(TranslatorInterface::class),
+            $this->getService(RequestStack::class),
+        ));
+
+        $content = $this->contentIn($this->factory->folder(), 'draft');
+        $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId());
+        self::assertResponseIsSuccessful();
+        self::assertCount(0, $crawler->filter('[data-testid="content-publication"]'));
+        self::assertCount(0, $crawler->filter('[name="thelia_content_modification[visible]"]'));
+
+        $crawler = $this->client->request('GET', '/admin/folders/update/'.$this->folderIn($this->factory->folder(), 'draft')->getId());
+        self::assertResponseIsSuccessful();
+        self::assertCount(0, $crawler->filter('[data-testid="folder-publication"]'));
+    }
+
+    public function testTheDashboardWarnsOfTheFoldersLeftBehind(): void
+    {
+        $parent = $this->factory->folder();
+        $overdue = $this->folderIn($parent, 'scheduled');
+        $overdue->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
+        $recent = $this->folderIn($parent, 'scheduled');
+        $recent->setPublishAt(new \DateTimeImmutable('-2 hours'))->save($this->getPropelConnection());
+
+        $crawler = $this->client->request('GET', '/admin/home');
+        self::assertResponseIsSuccessful();
+
+        $alert = $this->publicationAlerts($crawler);
+        self::assertCount(1, $alert, 'The folders left behind for over a day are reported, no content is.');
+        self::assertStringStartsWith('1 folder has', trim($alert->text()), 'A date passed two hours ago is not reported yet.');
+        $href = (string) $alert->attr('href');
+        self::assertStringContainsString('folder_id='.$parent->getId(), $href, 'The link opens the list that holds the folder.');
+        self::assertStringContainsString('publication_state=overdue', $href);
+    }
+
+    public function testTheDashboardWarnsOnlyOfWhatTheAdminMayView(): void
+    {
+        $parent = $this->factory->folder();
+        $this->contentIn($parent, 'scheduled')->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
+        $this->folderIn($parent, 'scheduled')->setPublishAt(new \DateTimeImmutable('-2 days'))->save($this->getPropelConnection());
+
+        $crawler = $this->client->request('GET', '/admin/home');
+        self::assertCount(2, $this->publicationAlerts($crawler), 'An administrator who views both is warned of both.');
+
+        foreach ([
+            'nothing of the contents and folders' => [[AdminResources::ORDER => [AccessManager::VIEW]], []],
+            'the contents only' => [[AdminResources::CONTENT => [AccessManager::VIEW]], ['1 content has']],
+            'the folders only' => [[AdminResources::FOLDER => [AccessManager::VIEW]], ['1 folder has']],
+        ] as $case => [$grants, $expected]) {
+            $admin = $this->factory->restrictedAdmin($grants + [AdminController::RESOURCE_CODE => [AccessManager::VIEW]]);
+            $admin->eraseCredentials();
+            $this->injector?->setAdmin($admin);
+
+            $crawler = $this->client->request('GET', '/admin/home');
+            self::assertResponseIsSuccessful();
+            self::assertSame(
+                $expected,
+                $this->publicationAlerts($crawler)->each(static fn (Crawler $alert): string => substr(trim($alert->text()), 0, \strlen($expected[0] ?? ''))),
+                'An administrator who views '.$case.' is warned of that only.',
+            );
+        }
+    }
+
+    public function testAnUnexpectedFailureIsShownWithoutItsDetails(): void
+    {
+        $content = $this->contentIn($this->factory->folder(), 'draft');
+        $failure = static function (): void {
+            throw new \RuntimeException('SQLSTATE[HY000]: a detail for the log only');
+        };
+        $dispatcher = $this->getService(EventDispatcherInterface::class);
+        $dispatcher->addListener(TheliaEvents::CONTENT_UPDATE_PUBLICATION, $failure, 1000);
+
+        try {
+            $crawler = $this->client->request('GET', '/admin/content/update/'.$content->getId());
+            $form = $crawler->filter('[data-testid="content-publication-submit"]')->form();
+            $form['thelia_content_publication[action]'] = 'publish';
+            $this->client->submit($form);
+        } finally {
+            $dispatcher->removeListener(TheliaEvents::CONTENT_UPDATE_PUBLICATION, $failure);
+        }
+
+        self::assertResponseRedirects('/admin/content/update/'.$content->getId());
+        $flash = trim($this->client->followRedirect()->filter('[data-testid="bo-flash-danger"]')->text());
+        self::assertSame('The publication could not be updated. See the system log for the details.', $flash);
+        self::assertSame(0, (int) $this->reloaded($content)->getVisible());
+    }
+
+    private function publicationAlerts(Crawler $crawler): Crawler
+    {
+        return $crawler->filter('[data-testid="dashboard-alert"]')->reduce(static fn (Crawler $node): bool => str_contains($node->text(), 'content:publish-scheduled'));
+    }
+
+    private function reloadedFolder(Folder $folder): Folder
+    {
+        $reloaded = FolderQuery::create()->findPk($folder->getId());
+        self::assertNotNull($reloaded);
+        $reloaded->reload();
+
+        return $reloaded;
     }
 
     /**
