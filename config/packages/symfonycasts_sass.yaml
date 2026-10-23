@@ -1,0 +1,6 @@
+# The back-office stylesheet is minified in prod only: dev keeps the readable
+# "expanded" output of the bundle default.
+when@prod:
+  symfonycasts_sass:
+    sass_options:
+      style: compressed

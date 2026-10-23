@@ -1,0 +1,7 @@
+# Precompression only runs during asset-map:compile, which is a prod deploy step:
+# dev serves assets on the fly and never compresses them.
+when@prod:
+  framework:
+    asset_mapper:
+      precompress:
+        enabled: true
