@@ -19,6 +19,7 @@ use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormErrorRenderer;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminFormValidator;
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminLogger;
+use BackOfficeDefaultTwigBundle\Service\Configuration\VisitorCountryContext;
 use BackOfficeDefaultTwigBundle\Service\I18n\CountryStateProvider;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -36,6 +37,7 @@ use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Core\SharedCache\SharedCacheMode;
 use Thelia\Core\SharedCache\SharedCachePolicy;
 use Thelia\Domain\Checkout\Enum\GuestCheckoutMode;
+use Thelia\Domain\Localization\VisitorCountry\VisitorCountrySettings;
 use Thelia\Domain\Media\Video\VideoProviderResolver;
 use Thelia\Domain\Taxation\Enum\VatExemptionMode;
 use Thelia\Model\ConfigQuery;
@@ -87,7 +89,7 @@ final class ConfigStoreController
         return new Response($this->twig->render(self::VIEW_TEMPLATE, [
             'form' => $form->createView(),
             'media_urls' => $this->storeMediaUrls(),
-        ]));
+        ] + $this->visitorCountryViewVariables()));
     }
 
     #[Route('/save', name: 'save', methods: ['POST'])]
@@ -120,7 +122,7 @@ final class ConfigStoreController
             );
 
             return new Response(
-                $this->twig->render(self::VIEW_TEMPLATE, ['form' => $form->createView()]),
+                $this->twig->render(self::VIEW_TEMPLATE, ['form' => $form->createView()] + $this->visitorCountryViewVariables()),
                 Response::HTTP_BAD_REQUEST,
             );
         }
@@ -134,11 +136,23 @@ final class ConfigStoreController
     }
 
     /**
+     * @return array{visitor_country_available: bool, visitor_country_header_suggestions: list<string>, visitor_country_header_datalist_id: string}
+     */
+    private function visitorCountryViewVariables(): array
+    {
+        return [
+            'visitor_country_available' => VisitorCountryContext::coreHasVisitorCountry(),
+            'visitor_country_header_suggestions' => VisitorCountryContext::HEADER_SUGGESTIONS,
+            'visitor_country_header_datalist_id' => VisitorCountryContext::HEADER_DATALIST_ID,
+        ];
+    }
+
+    /**
      * @return array<string, string|null>
      */
     private function readStoreData(): array
     {
-        return [
+        $data = [
             'store_name' => (string) ConfigQuery::read('store_name', ''),
             'store_description' => (string) ConfigQuery::read('store_description', ''),
             'store_siret' => (string) ConfigQuery::read('store_siret', ''),
@@ -167,6 +181,17 @@ final class ConfigStoreController
             'shared_cache_ttl' => (string) SharedCachePolicy::ttl(),
             'video_providers' => (string) ConfigQuery::read(VideoProviderResolver::PROVIDERS_VARIABLE, VideoProviderResolver::DEFAULT_PROVIDERS),
         ];
+
+        if (VisitorCountryContext::coreHasVisitorCountry()) {
+            $settings = new VisitorCountrySettings();
+
+            $data['visitor_country_mode'] = $settings->mode()->value;
+            $data['visitor_country_source'] = $settings->source()->value;
+            $data['visitor_country_header'] = $settings->header();
+            $data['visitor_country_database'] = $settings->databaseFileName();
+        }
+
+        return $data;
     }
 
     /**

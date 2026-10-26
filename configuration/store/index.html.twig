@@ -166,6 +166,23 @@
                         </div>
                     </div>
 
+                    {% if visitor_country_available|default(false) %}
+                        <div class="card mb-4" data-testid="config-store-visitor-country">
+                            <div class="card-header">{{ 'Visitor country'|trans }}</div>
+                            <div class="card-body">
+                                {{ form_row(form.visitor_country_mode, { attr: { 'data-testid': 'config-store-visitor-country-mode' } }) }}
+                                {{ form_row(form.visitor_country_source, { attr: { 'data-testid': 'config-store-visitor-country-source' } }) }}
+                                {{ form_row(form.visitor_country_header, { attr: { 'data-testid': 'config-store-visitor-country-header' } }) }}
+                                <datalist id="{{ visitor_country_header_datalist_id }}" data-testid="config-store-visitor-country-header-options">
+                                    {% for header in visitor_country_header_suggestions %}
+                                        <option value="{{ header }}"></option>
+                                    {% endfor %}
+                                </datalist>
+                                {{ form_row(form.visitor_country_database, { attr: { 'data-testid': 'config-store-visitor-country-database' } }) }}
+                            </div>
+                        </div>
+                    {% endif %}
+
                     <div class="card mb-4">
                         <div class="card-header">{{ 'Product videos'|trans }}</div>
                         <div class="card-body">

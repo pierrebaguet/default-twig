@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Form\Configuration;
 
+use BackOfficeDefaultTwigBundle\Service\Configuration\VisitorCountryContext;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
@@ -37,6 +38,8 @@ use Thelia\Core\SharedCache\SharedCacheMode;
 use Thelia\Core\SharedCache\SharedCachePolicy;
 use Thelia\Domain\Checkout\Enum\GuestCheckoutMode;
 use Thelia\Domain\Legal\CompanyIdentifier;
+use Thelia\Domain\Localization\VisitorCountry\VisitorCountryMode;
+use Thelia\Domain\Localization\VisitorCountry\VisitorCountrySource;
 use Thelia\Domain\Media\Video\VideoProvider;
 use Thelia\Domain\Taxation\Enum\VatExemptionMode;
 
@@ -257,6 +260,10 @@ final class ConfigStoreType extends AbstractType
                 'help' => $this->translator->trans('Banner of the website. Used in e-mails sent to customers.'),
             ]);
 
+        if (VisitorCountryContext::coreHasVisitorCountry()) {
+            $this->addVisitorCountryFields($builder);
+        }
+
         // The model data of every company identifier is the string stored in the config table:
         // normalizing here, and not in the controller, lets the constraints above run on the
         // normalized value, so that "fr 40 303 265 045" is accepted and stored as "FR40303265045".
@@ -292,8 +299,103 @@ final class ConfigStoreType extends AbstractType
             ->setAllowedTypes('country_choices', 'array')
             ->setDefaults([
                 'csrf_token_id' => 'admin.config-store',
-                'constraints' => [new Callback($this->checkVatExemption(...))],
+                'constraints' => [
+                    new Callback($this->checkVatExemption(...)),
+                    new Callback($this->checkVisitorCountry(...)),
+                ],
             ]);
+    }
+
+    /**
+     * Only called on a core that carries the visitor country detection.
+     */
+    private function addVisitorCountryFields(FormBuilderInterface $builder): void
+    {
+        $builder
+            ->add('visitor_country_mode', ChoiceType::class, [
+                'constraints' => [new NotBlank()],
+                'label' => $this->translator->trans('Visitor country detection'),
+                'help' => $this->translator->trans('Detects the country of an anonymous visitor to suggest or apply it. A signed-in customer keeps the country of their address.'),
+                'choices' => [
+                    $this->translator->trans('Off: every visitor sees the shop\'s default country') => VisitorCountryMode::Off->value,
+                    $this->translator->trans('Suggest: offer the detected country in a banner') => VisitorCountryMode::Suggest->value,
+                    $this->translator->trans('Apply: show prices in the detected country') => VisitorCountryMode::Apply->value,
+                ],
+                'placeholder' => false,
+            ])
+            ->add('visitor_country_source', ChoiceType::class, [
+                'constraints' => [new NotBlank()],
+                'label' => $this->translator->trans('Detection source'),
+                'choices' => [
+                    $this->translator->trans('Header set by the CDN or the proxy') => VisitorCountrySource::Header->value,
+                    $this->translator->trans('IP database (MaxMind .mmdb file)') => VisitorCountrySource::IpDatabase->value,
+                ],
+                'placeholder' => false,
+            ])
+            ->add('visitor_country_header', TextType::class, [
+                'required' => false,
+                'constraints' => [
+                    new Length(max: 64),
+                    new Regex(
+                        pattern: '/^[A-Za-z0-9-]{1,64}$/',
+                        message: $this->translator->trans('A header name only contains letters, digits and hyphens.'),
+                    ),
+                ],
+                'label' => $this->translator->trans('Country header'),
+                'help' => $this->translator->trans('The proxy must rewrite this header on every request, otherwise a visitor can send it himself. It only drives what is displayed, never an order.'),
+                'attr' => ['list' => VisitorCountryContext::HEADER_DATALIST_ID, 'autocomplete' => 'off'],
+            ])
+            ->add('visitor_country_database', TextType::class, [
+                'required' => false,
+                'constraints' => [
+                    new Length(max: 128),
+                    new Regex(
+                        pattern: '/^[A-Za-z0-9._-]{1,128}$/',
+                        message: $this->translator->trans('A file name only contains letters, digits, dots, hyphens and underscores.'),
+                    ),
+                    new Callback($this->checkDatabaseFileName(...)),
+                ],
+                'label' => $this->translator->trans('IP database file'),
+                'help' => $this->translator->trans('Name of a country-level .mmdb file put in the local/geoip directory. It needs the maxmind-db/reader library, and keeping the file up to date is up to the merchant.'),
+            ]);
+    }
+
+    public function checkDatabaseFileName(mixed $value, ExecutionContextInterface $context): void
+    {
+        if (!\is_string($value) || !str_contains($value, '..')) {
+            return;
+        }
+
+        $context
+            ->buildViolation($this->translator->trans('A file name cannot contain two consecutive dots.'))
+            ->addViolation();
+    }
+
+    public function checkVisitorCountry(mixed $value, ExecutionContextInterface $context): void
+    {
+        if (!\is_array($value) || !\array_key_exists('visitor_country_mode', $value)) {
+            return;
+        }
+
+        $source = $value['visitor_country_source'] ?? null;
+
+        if (VisitorCountrySource::Header->value === $source && '' === trim((string) ($value['visitor_country_header'] ?? ''))) {
+            $context
+                ->buildViolation($this->translator->trans('Give the name of the header that carries the country.'))
+                ->atPath('children[visitor_country_header]')
+                ->addViolation();
+        }
+
+        if (
+            VisitorCountrySource::IpDatabase->value === $source
+            && VisitorCountryMode::Off->value !== ($value['visitor_country_mode'] ?? null)
+            && '' === trim((string) ($value['visitor_country_database'] ?? ''))
+        ) {
+            $context
+                ->buildViolation($this->translator->trans('Give the name of the IP database file.'))
+                ->atPath('children[visitor_country_database]')
+                ->addViolation();
+        }
     }
 
     public function checkEmailList(mixed $value, ExecutionContextInterface $context): void
