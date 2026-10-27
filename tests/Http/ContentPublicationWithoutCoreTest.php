@@ -17,6 +17,7 @@ namespace BackOfficeDefaultTwigBundle\Tests\Http;
 use BackOfficeDefaultTwigBundle\BackOfficeDefaultTwigBundle;
 use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Event\Content\ContentCreateEvent;
 use Thelia\Core\Event\TheliaEvents;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Content;
@@ -96,19 +97,31 @@ final class ContentPublicationWithoutCoreTest extends WebIntegrationTestCase
         self::assertCount(1, $crawler->filter('[name="thelia_folder_creation[visible]"]'));
     }
 
+    /**
+     * The ticked box reaches the creation event. What the core then does with an empty
+     * content created online is the core's: a core with the body guard refuses it.
+     */
     public function testACreationKeepsTheOnlineCheckbox(): void
     {
         $parent = $this->factory->folder();
+        $asked = [];
+        $recorder = static function (ContentCreateEvent $event) use (&$asked): void {
+            $asked[] = (bool) $event->getVisible();
+        };
+        $dispatcher = $this->getService(EventDispatcherInterface::class);
+        $dispatcher->addListener(TheliaEvents::CONTENT_CREATE, $recorder, 1024);
 
-        $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$parent->getId());
-        $form = $crawler->filter('[data-testid="content-create-form"]')->form();
-        $form['thelia_content_creation[title]'] = 'A content created online';
-        $form['thelia_content_creation[visible]']->tick();
-        $this->client->submit($form);
+        try {
+            $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$parent->getId());
+            $form = $crawler->filter('[data-testid="content-create-form"]')->form();
+            $form['thelia_content_creation[title]'] = 'A content created online';
+            $form['thelia_content_creation[visible]']->tick();
+            $this->client->submit($form);
+        } finally {
+            $dispatcher->removeListener(TheliaEvents::CONTENT_CREATE, $recorder);
+        }
 
-        $content = ContentQuery::create()->useContentI18nQuery()->filterByTitle('A content created online')->endUse()->findOne();
-        self::assertNotNull($content);
-        self::assertSame(1, (int) $content->getVisible());
+        self::assertSame([true], $asked, 'The content is asked online.');
     }
 
     public function testTheSheetKeepsItsCheckboxAndItsPlainPreviewLink(): void
