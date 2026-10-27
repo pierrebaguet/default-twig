@@ -379,7 +379,11 @@ final class ConfigStoreType extends AbstractType
 
         $source = $value['visitor_country_source'] ?? null;
 
-        if (VisitorCountrySource::Header->value === $source && '' === trim((string) ($value['visitor_country_header'] ?? ''))) {
+        if (
+            VisitorCountrySource::Header->value === $source
+            && VisitorCountryMode::Off->value !== ($value['visitor_country_mode'] ?? null)
+            && '' === trim((string) ($value['visitor_country_header'] ?? ''))
+        ) {
             $context
                 ->buildViolation($this->translator->trans('Give the name of the header that carries the country.'))
                 ->atPath('children[visitor_country_header]')

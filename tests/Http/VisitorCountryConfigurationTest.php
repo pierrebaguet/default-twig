@@ -163,6 +163,15 @@ final class VisitorCountryConfigurationTest extends WebIntegrationTestCase
         self::assertSame('suggest', $this->storedValue(self::MODE));
     }
 
+    public function testAHeaderSourceWithoutAHeaderIsAcceptedWhileTheDetectionIsOff(): void
+    {
+        $this->submit('off', 'header', '', '');
+
+        self::assertSame(302, $this->client->getResponse()->getStatusCode());
+        self::assertSame('off', $this->storedValue(self::MODE));
+        self::assertSame('header', $this->storedValue(self::SOURCE));
+    }
+
     public function testAnIpDatabaseSourceWithoutAFileIsRefusedUnlessTheDetectionIsOff(): void
     {
         $this->submit('suggest', 'header', 'X-Country-Code', '');
