@@ -15,7 +15,9 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use BackOfficeDefaultTwigBundle\BackOfficeDefaultTwigBundle;
+use BackOfficeDefaultTwigBundle\Repository\ContentRepository;
 use BackOfficeDefaultTwigBundle\Service\Publication\ContentPublicationSupport;
+use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStateFilter;
 use BackOfficeDefaultTwigBundle\Service\Publication\PublicationStatePresenter;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -161,6 +163,36 @@ final class ContentPublicationScreenTest extends WebIntegrationTestCase
             $crawler->filter('[data-testid="datatable-folder-contents-row"]')->each(static fn (Crawler $row): string => (string) $row->attr('data-row-id')),
         );
         self::assertStringContainsString('text-bg-warning', (string) $crawler->filter('[data-testid="datatable-folder-contents-cell-publication_badge"] .badge')->attr('class'));
+    }
+
+    public function testTheOverdueFilterKeepsToTheFolderBeingListed(): void
+    {
+        $listed = $this->factory->folder();
+        $other = $this->factory->folder();
+        $overdueContents = [];
+        $overdueFolders = [];
+
+        foreach ([$listed, $other] as $parent) {
+            // Published, withdrawal date past: the second branch of the overdue condition.
+            $overdueContents[] = $this->contentIn($parent, 'published', ['unpublish_at' => '-2 hours']);
+            $overdueFolder = $this->folderIn($parent, 'published');
+            $overdueFolder->setUnpublishAt(new \DateTimeImmutable('-2 hours'))->save($this->getPropelConnection());
+            $overdueFolders[] = $overdueFolder;
+        }
+
+        $crawler = $this->client->request('GET', '/admin/folders?folder_id='.$listed->getId().'&publication_state=overdue');
+
+        self::assertSame(
+            [(string) $overdueContents[0]->getId()],
+            $crawler->filter('[data-testid="datatable-folder-contents-row"]')->each(static fn (Crawler $row): string => (string) $row->attr('data-row-id')),
+            'The contents overdue in another folder are not listed here.',
+        );
+        self::assertSame(
+            [(string) $overdueFolders[0]->getId()],
+            $crawler->filter('[data-testid="datatable-folders-row"]')->each(static fn (Crawler $row): string => (string) $row->attr('data-row-id')),
+            'The folders overdue under another parent are not listed here.',
+        );
+        self::assertSame(1, (new ContentRepository())->countInFolder((int) $listed->getId(), PublicationStateFilter::Overdue), 'The pagination counts the contents of this folder only.');
     }
 
     public function testANewContentAndANewFolderStartAsDrafts(): void

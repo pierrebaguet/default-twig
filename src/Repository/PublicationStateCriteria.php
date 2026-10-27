@@ -71,9 +71,11 @@ final readonly class PublicationStateCriteria
         $publishAt = $table.'.publish_at';
         $unpublishAt = $table.'.unpublish_at';
 
+        // Propel joins its clauses with AND and no parentheses: the OR is wrapped whole,
+        // or the rows of the second branch escape the scope of the list (its folder).
         $query->where(\sprintf(
-            '((%1$s IS NULL OR %1$s <> 1) AND %2$s IS NOT NULL AND %2$s <= %4$s AND (%3$s IS NULL OR %3$s > %5$s))'
-            .' OR (%1$s = 1 AND %3$s IS NOT NULL AND %3$s <= %4$s)',
+            '(((%1$s IS NULL OR %1$s <> 1) AND %2$s IS NOT NULL AND %2$s <= %4$s AND (%3$s IS NULL OR %3$s > %5$s))'
+            .' OR (%1$s = 1 AND %3$s IS NOT NULL AND %3$s <= %4$s))',
             $visible,
             $publishAt,
             $unpublishAt,
