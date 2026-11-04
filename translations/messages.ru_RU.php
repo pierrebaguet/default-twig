@@ -1633,4 +1633,5 @@ return [
     'The shop no longer offers newsletter sign-up. Existing subscribers are kept.' => 'Магазин больше не предлагает подписку на рассылку. Существующие подписчики сохраняются.',
     'Newsletter sign-up switch' => 'Переключатель подписки на рассылку',
     'The state asked for the newsletter is not valid.' => 'Запрошенное состояние рассылки недопустимо.',
+    'Scheduled reports' => 'Отчёты по расписанию',
 ];

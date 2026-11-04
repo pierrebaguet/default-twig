@@ -174,7 +174,7 @@
             {% endif %}
 
             {% if is_granted('VIEW', 'admin.tools') %}
-                {% set active = nav.is_section(current_path, ['/admin/tools', '/admin/coupon', '/admin/sale', '/admin/catalog-price-rule', '/admin/newsletter', '/admin/export', '/admin/import', '/admin/brand']) %}
+                {% set active = nav.is_section(current_path, ['/admin/tools', '/admin/coupon', '/admin/sale', '/admin/catalog-price-rule', '/admin/newsletter', '/admin/export', '/admin/scheduled-reports', '/admin/import', '/admin/brand']) %}
                 <li class="nav-item" data-testid="bo-nav-tools">
                     <a href="#bo-nav-tools-collapse" data-bs-toggle="collapse" aria-expanded="{{ active ? 'true' : 'false' }}" class="nav-link bo-side-nav__toggle {{ active ? 'active' : '' }}">
                         <i class="bi bi-wrench-adjustable me-2" aria-hidden="true"></i>
@@ -206,6 +206,10 @@
                         {% if is_granted('VIEW', 'admin.export') %}
                             {% set item_active = nav.is_section(current_path, ['/admin/export']) %}
                             <li><a class="nav-link {{ item_active ? 'active' : '' }}" href="{{ path('export.list') }}">{{ 'Export'|trans }}</a></li>
+                        {% endif %}
+                        {% if is_granted('VIEW', 'admin.export') and scheduled_reports_available() %}
+                            {% set item_active = nav.is_section(current_path, ['/admin/scheduled-reports']) %}
+                            <li><a class="nav-link {{ item_active ? 'active' : '' }}" href="{{ path('admin.scheduled-report.default') }}" data-testid="bo-nav-scheduled-reports">{{ 'Scheduled reports'|trans }}</a></li>
                         {% endif %}
                         {% if is_granted('VIEW', 'admin.import') %}
                             {% set item_active = nav.is_section(current_path, ['/admin/import']) %}

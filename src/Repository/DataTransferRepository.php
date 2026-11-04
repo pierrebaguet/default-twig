@@ -46,7 +46,7 @@ final readonly class DataTransferRepository
     }
 
     /**
-     * @return list<array{id: int, title: string, exports: list<array{id: int, ref: string, title: string, description: string, position: int}>}>
+     * @return list<array{id: int, title: string, exports: list<array{id: int, ref: string, title: string, description: string, position: int, handler_available: bool}>}>
      */
     public function findExportCatalogue(string $locale): array
     {

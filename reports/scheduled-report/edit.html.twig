@@ -1,0 +1,76 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% block title %}{{ report ? 'Edit the report'|trans : 'New report'|trans }}{% endblock %}
+{% block body_testid %}scheduled-report-edit{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.tools.index') }}">{{ 'Tools'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('export.list') }}">{{ 'Export'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.scheduled-report.default') }}">{{ 'Scheduled reports'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ report ? report.title : 'New report'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    {% set can_write = report ? is_granted('UPDATE', 'admin.export') : is_granted('CREATE', 'admin.export') %}
+    <div class="container-fluid" data-testid="scheduled-report-edit-page">
+        <h1 class="h3 mb-3">{{ report ? 'Edit the report'|trans : 'New report'|trans }}</h1>
+
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        {% form_theme form with bo_form_themes only %}
+                        {{ form_start(form, { action: report ? path('admin.scheduled-report.save', { id: report.id }) : path('admin.scheduled-report.create'), method: 'post', attr: { autocomplete: 'off', 'data-testid': 'scheduled-report-form' } }) }}
+                            {{ form_errors(form) }}
+                            {{ form_row(form.title) }}
+                            {{ form_row(form.export_ref) }}
+                            {{ form_row(form.period) }}
+                            {{ form_row(form.frequency) }}
+                            {{ form_row(form.day_of_week) }}
+                            {{ form_row(form.day_of_month) }}
+                            {{ form_row(form.send_hour) }}
+                            {{ form_row(form.locale) }}
+                            <h2 class="h6 mt-4">{{ 'Recipients'|trans }}</h2>
+                            <fieldset class="mb-3" data-testid="report-administrators">
+                                <legend class="form-label fs-6">{{ form.administrators.vars.label }}</legend>
+                                {% if form.administrators|length == 0 %}
+                                    <p class="text-body-secondary small mb-0">{{ 'No administrator has an e-mail address.'|trans }}</p>
+                                {% endif %}
+                                {% for child in form.administrators %}
+                                    <div class="form-check">
+                                        {{ form_widget(child, { attr: { class: 'form-check-input' } }) }}
+                                        {{ form_label(child, null, { label_attr: { class: 'form-check-label' }, translation_domain: false }) }}
+                                    </div>
+                                {% endfor %}
+                                {{ form_errors(form.administrators) }}
+                            </fieldset>
+                            {{ form_row(form.other_recipients) }}
+                            {{ form_row(form.confirm_external) }}
+                            {{ form_row(form.enabled) }}
+                            {{ form_rest(form) }}
+                            <div class="d-flex justify-content-end gap-2 mt-3">
+                                <a href="{{ path('admin.scheduled-report.default') }}" class="btn btn-outline-secondary">{{ 'Cancel'|trans }}</a>
+                                {% if can_write %}
+                                    <button type="submit" class="btn btn-primary" data-testid="scheduled-report-save"><i class="bi bi-check2" aria-hidden="true"></i> {{ 'Save'|trans }}</button>
+                                {% endif %}
+                            </div>
+                        {{ form_end(form) }}
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h6">{{ 'Who receives the figures'|trans }}</h2>
+                        <p class="text-body-secondary small mb-0">{{ 'A report carries the sales figures of the shop. Send it to the administrators of the shop, and to other addresses only when you are sure they may read these figures.'|trans }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

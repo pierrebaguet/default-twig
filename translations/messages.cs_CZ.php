@@ -1632,4 +1632,5 @@ return [
     'The shop no longer offers newsletter sign-up. Existing subscribers are kept.' => 'Obchod již nenabízí přihlášení k odběru newsletteru. Stávající odběratelé zůstávají zachováni.',
     'Newsletter sign-up switch' => 'Přepínač přihlášení k odběru newsletteru',
     'The state asked for the newsletter is not valid.' => 'Požadovaný stav newsletteru není platný.',
+    'Scheduled reports' => 'Plánované reporty',
 ];

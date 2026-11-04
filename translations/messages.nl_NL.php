@@ -1632,4 +1632,5 @@ return [
     'The shop no longer offers newsletter sign-up. Existing subscribers are kept.' => 'De winkel biedt geen inschrijving op de nieuwsbrief meer aan. Bestaande abonnees blijven behouden.',
     'Newsletter sign-up switch' => 'Schakelaar voor inschrijving op de nieuwsbrief',
     'The state asked for the newsletter is not valid.' => 'De gevraagde status voor de nieuwsbrief is ongeldig.',
+    'Scheduled reports' => 'Geplande rapporten',
 ];

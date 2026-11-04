@@ -1726,4 +1726,5 @@ return [
     'The shop no longer offers newsletter sign-up. Existing subscribers are kept.' => 'Il negozio non offre più l\'iscrizione alla newsletter. Gli iscritti esistenti vengono conservati.',
     'Newsletter sign-up switch' => 'Interruttore dell\'iscrizione alla newsletter',
     'The state asked for the newsletter is not valid.' => 'Lo stato richiesto per la newsletter non è valido.',
+    'Scheduled reports' => 'Report pianificati',
 ];

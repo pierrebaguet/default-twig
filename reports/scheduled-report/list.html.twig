@@ -1,0 +1,139 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% block title %}{{ 'Scheduled reports'|trans }}{% endblock %}
+{% block body_testid %}scheduled-reports-list{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('admin.tools.index') }}">{{ 'Tools'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ path('export.list') }}">{{ 'Export'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Scheduled reports'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    {% set can_update = is_granted('UPDATE', 'admin.export') %}
+    <div class="container-fluid" data-testid="scheduled-reports-page">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">{{ 'Scheduled reports'|trans }}</h1>
+            {% if is_granted('CREATE', 'admin.export') %}
+                <a class="btn btn-primary" href="{{ path('admin.scheduled-report.new') }}" data-testid="scheduled-report-create-button">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'New report'|trans }}
+                </a>
+            {% endif %}
+        </div>
+
+        <p class="text-body-secondary">{{ 'An export that the shop runs by itself and sends by e-mail, every day, week or month.'|trans }}</p>
+
+        {{ component('BoDataTable', {
+            id: 'scheduled-reports',
+            columns: [
+                column('title', 'Name'|trans, 'start'),
+                column('export', 'Export file'|trans, 'start'),
+                column('frequency', 'Frequency'|trans, 'start', hideBelow: 'md'),
+                column('recipients', 'Recipients'|trans, 'end'),
+                column_toggle('enabled', 'Active'|trans, 'toggle_url'),
+                column('last_sent', 'Last sent'|trans, 'start', hideBelow: 'xl'),
+                column('pending', 'Retries pending'|trans, 'end', hideBelow: 'xl'),
+                column_actions('_actions', 'Actions'|trans),
+            ],
+            rows: rows,
+            emptyMessage: 'No scheduled report yet.'|trans,
+        }) }}
+
+        <div class="row g-3 mt-1">
+            <div class="col-lg-5">
+                <div class="card h-100" data-testid="scheduled-reports-settings">
+                    <div class="card-body">
+                        <h2 class="h6">{{ 'Delivery of the file'|trans }}</h2>
+                        <form method="post" action="{{ path('admin.scheduled-report.settings') }}">
+                            <input type="hidden" name="_token" value="{{ assignToken() }}">
+                            <div class="mb-3">
+                                <label class="form-label" for="report-attachment-max-mb">{{ 'Largest file sent as an attachment (MB)'|trans }}</label>
+                                <input class="form-control" type="number" min="0" max="{{ max_attachment_mb }}" step="1" id="report-attachment-max-mb" name="attachment_max_mb" value="{{ attachment_max_mb }}"{{ can_update ? '' : ' disabled' }} data-testid="report-attachment-max-mb">
+                                <div class="form-text">{{ 'A larger file is sent as a link. 0 sends every report as a link.'|trans }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="report-link-lifetime-days">{{ 'Lifetime of a download link (days)'|trans }}</label>
+                                <input class="form-control" type="number" min="1" max="{{ max_link_lifetime_days }}" step="1" id="report-link-lifetime-days" name="link_lifetime_days" value="{{ link_lifetime_days }}"{{ can_update ? '' : ' disabled' }} data-testid="report-link-lifetime-days">
+                                <div class="form-text">{{ 'Between 1 and 14 days.'|trans }}</div>
+                            </div>
+                            {% if can_update %}
+                                <button type="submit" class="btn btn-outline-primary btn-sm" data-testid="report-settings-save">{{ 'Save'|trans }}</button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card h-100" data-testid="scheduled-reports-scheduling">
+                    <div class="card-body">
+                        <h2 class="h6">{{ 'How the reports get sent'|trans }}</h2>
+
+                        <h3 class="h6 mt-3 mb-1">{{ 'Schedule of the shop'|trans }}</h3>
+                        {% if scheduling.shop_schedule_enabled %}
+                            <p class="small mb-1">{{ 'The due reports are looked for with the expression'|trans }} <code data-testid="report-schedule-expression">{{ scheduling.expression }}</code>.</p>
+                            <p class="small text-body-secondary mb-0">{{ 'It only runs while the messenger worker of the shop runs:'|trans }} <code data-testid="report-worker-command">{{ scheduling.worker_command }}</code></p>
+                        {% else %}
+                            <p class="small text-body-secondary mb-0" data-testid="report-schedule-disabled">{{ 'The schedule of the shop does not look for the reports (empty expression).'|trans }}</p>
+                        {% endif %}
+
+                        {% if scheduling.web_scheduler %}
+                            <h3 class="h6 mt-3 mb-1">{{ 'WebScheduler task'|trans }}</h3>
+                            {% if scheduling.task %}
+                                <p class="small mb-1" data-testid="report-web-scheduler-task">
+                                    <span class="badge text-bg-{{ scheduling.task.enabled ? 'success' : 'secondary' }}">{{ (scheduling.task.enabled ? 'Enabled' : 'Disabled')|trans }}</span>
+                                    <a href="{{ scheduling.task.admin_url }}">{{ 'Open the task in WebScheduler'|trans }}</a>
+                                </p>
+                                {% if can_update %}
+                                    <p class="small mb-1">{{ 'Address to call from the scheduled tasks of the host:'|trans }}</p>
+                                    <code class="d-block small text-break" data-testid="report-web-scheduler-url">{{ scheduling.task.url }}</code>
+                                    <p class="small text-body-secondary mt-1 mb-0" data-testid="report-web-scheduler-ip-note">{{ 'The task answers calls from any address until its IP allowlist is filled in WebScheduler.'|trans }}</p>
+                                {% endif %}
+                            {% else %}
+                                <p class="small text-body-secondary">{{ 'The WebScheduler module is active: it can run the reports from a task called by the host.'|trans }}</p>
+                                {% if can_update %}
+                                    <form method="post" action="{{ path('admin.scheduled-report.prepare-web-scheduler') }}">
+                                        <input type="hidden" name="_token" value="{{ assignToken() }}">
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" data-testid="report-prepare-web-scheduler">{{ 'Prepare the WebScheduler task'|trans }}</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        {% else %}
+                            <h3 class="h6 mt-3 mb-1">{{ 'Crontab of the server'|trans }}</h3>
+                            <p class="small text-body-secondary mb-1">{{ 'Without the messenger worker, add this line to the crontab of the server:'|trans }}</p>
+                            <code class="d-block small text-break" data-testid="report-cron-line">{{ scheduling.cron_line }}</code>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{ component('BoConfirmDialog', {
+        id: 'scheduled-report-delete-modal',
+        title: 'Delete the report',
+        formAction: path('admin.scheduled-report.delete'),
+        message: 'Do you really want to delete this report? It will not be sent any more.',
+        testid: 'scheduled-report-delete',
+        prefillTrigger: 'data-report-id',
+        prefillInput: 'report_id',
+    }) }}
+
+    {{ component('BoConfirmDialog', {
+        id: 'scheduled-report-send-modal',
+        title: 'Send the report now',
+        formAction: path('admin.scheduled-report.send'),
+        message: 'The report is sent now, over its usual period, to all its recipients. This can take a moment.',
+        variant: 'primary',
+        confirmLabel: 'Send now',
+        confirmIcon: 'bi-envelope',
+        testid: 'scheduled-report-send',
+        prefillTrigger: 'data-report-id',
+        prefillInput: 'report_id',
+    }) }}
+{% endblock %}

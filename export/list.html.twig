@@ -15,7 +15,14 @@
 
 {% block content %}
     <div class="container-fluid" data-testid="export-page">
-        <h1 class="h3 mb-3">{{ 'Available exports'|trans }}</h1>
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">{{ 'Available exports'|trans }}</h1>
+            {% if scheduled_reports_available() %}
+                <a class="btn btn-outline-secondary" href="{{ path('admin.scheduled-report.default') }}" data-testid="export-scheduled-reports-link">
+                    <i class="bi bi-envelope-paper" aria-hidden="true"></i> {{ 'Scheduled reports'|trans }}
+                </a>
+            {% endif %}
+        </div>
 
         {{ safe_hook('exports.top', { location: 'exports_top' }) }}
 
