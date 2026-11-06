@@ -3440,6 +3440,7 @@ return [
     'The report was deleted.' => 'Le rapport a été supprimé.',
     'Sending a scheduled report' => 'Envoi d\'un rapport programmé',
     'Report sent to %sent%, failed for %failed%, rejected for %rejected%.' => 'Rapport envoyé à %sent%, échec pour %failed%, rejeté pour %rejected%.',
+    'The report is being sent by a scheduled run: nothing was sent, try again in a few minutes.' => 'Le rapport est en cours d\'envoi par une exécution programmée : rien n\'a été envoyé, réessayez dans quelques minutes.',
     'The settings were not saved: check the two values.' => 'Les réglages n\'ont pas été enregistrés : vérifiez les deux valeurs.',
     'The settings were saved.' => 'Les réglages ont été enregistrés.',
     'Preparing the WebScheduler task' => 'Préparation de la tâche WebScheduler',

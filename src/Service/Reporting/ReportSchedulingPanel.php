@@ -75,7 +75,8 @@ final readonly class ReportSchedulingPanel
                 'url' => $this->triggerUrl($task),
                 'admin_url' => $this->urls->generate('webscheduler.admin.task.update', ['id' => (int) $task->getId()]),
             ],
-            'cron_line' => \sprintf('%s cd %s && php bin/console %s', self::DEFAULT_EXPRESSION, escapeshellarg($this->projectDir), self::COMMAND),
+            // The expression of the shop schedule when there is one, so that both say the same.
+            'cron_line' => \sprintf('%s cd %s && php bin/console %s', '' === $expression ? self::DEFAULT_EXPRESSION : $expression, escapeshellarg($this->projectDir), self::COMMAND),
         ];
     }
 

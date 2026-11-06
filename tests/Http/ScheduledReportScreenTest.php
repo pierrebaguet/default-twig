@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use Symfony\Component\DomCrawler\Crawler;
+use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Thelia\Core\Security\AccessManager;
@@ -263,6 +264,29 @@ final class ScheduledReportScreenTest extends WebIntegrationTestCase
         self::assertSame(2, \count($factory->renderedWith));
         self::assertNotNull(ReportMailingQuery::create()->findPk($mailing->getId())?->getLastSentAt(), 'the list shows when it went out');
         self::assertStringContainsString('Report sent to 2, failed for 0, rejected for 0.', $this->flash());
+    }
+
+    public function testSendNowIsRefusedWhileAScheduledRunIsSendingTheSameReport(): void
+    {
+        $mailing = $this->mailing('Busy', ['one@example.com']);
+        $factory = $this->captureMail();
+        $token = $this->token();
+        ConfigQuery::write('store_email', 'shop@example.com');
+        ConfigQuery::resetCache();
+        // The lock report:send-due holds while it sends this mailing.
+        $held = $this->getService(LockFactory::class)->createLock('report_mailing.'.$mailing->getId());
+        self::assertTrue($held->acquire());
+
+        try {
+            $this->client->request('POST', '/admin/scheduled-reports/send', ['report_id' => $mailing->getId(), '_token' => $token]);
+            $this->client->followRedirect();
+        } finally {
+            $held->release();
+        }
+
+        self::assertSame([], $factory->renderedWith);
+        self::assertNull(ReportMailingQuery::create()->findPk($mailing->getId())?->getLastSentAt());
+        self::assertStringContainsString('The report is being sent by a scheduled run', $this->flash());
     }
 
     public function testSendNowSaysWhenTheServerCannotSend(): void

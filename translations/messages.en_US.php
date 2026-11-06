@@ -1272,6 +1272,7 @@ return [
     'The report was deleted.' => 'The report was deleted.',
     'Sending a scheduled report' => 'Sending a scheduled report',
     'Report sent to %sent%, failed for %failed%, rejected for %rejected%.' => 'Report sent to %sent%, failed for %failed%, rejected for %rejected%.',
+    'The report is being sent by a scheduled run: nothing was sent, try again in a few minutes.' => 'The report is being sent by a scheduled run: nothing was sent, try again in a few minutes.',
     'The settings were not saved: check the two values.' => 'The settings were not saved: check the two values.',
     'The settings were saved.' => 'The settings were saved.',
     'Preparing the WebScheduler task' => 'Preparing the WebScheduler task',

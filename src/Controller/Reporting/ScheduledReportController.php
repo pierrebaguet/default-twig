@@ -35,7 +35,7 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Domain\Reporting\Mailing\ReportFrequency;
-use Thelia\Domain\Reporting\Mailing\ReportMailer;
+use Thelia\Domain\Reporting\Mailing\ImmediateReportSender;
 use Thelia\Domain\Reporting\Mailing\ReportMailingSettings;
 use Thelia\Domain\Reporting\Mailing\ReportPeriod;
 use Thelia\Model\ConfigQuery;
@@ -79,7 +79,7 @@ final class ScheduledReportController
         private readonly ScheduledReportChoices $choices,
         private readonly ScheduledReportLabels $labels,
         // Null on a core that predates the scheduled reports: the class is not there to autowire.
-        private readonly ?ReportMailer $mailer = null,
+        private readonly ?ImmediateReportSender $sender = null,
     ) {
     }
 
@@ -236,22 +236,24 @@ final class ScheduledReportController
         $id = (int) $request->request->get('report_id', 0);
         $mailing = ReportMailingQuery::create()->findPk($id);
 
-        if (null === $mailing || null === $this->mailer || !$this->tokenIsValid($request)) {
+        if (null === $mailing || null === $this->sender || !$this->tokenIsValid($request)) {
             return $back;
         }
 
-        // To the second, as the commands of the core write it: MySQL rounds a fraction up, into the future.
-        $now = new \DateTimeImmutable(date('Y-m-d H:i:s'));
-
         try {
-            $result = $this->mailer->send($mailing, $now);
+            $result = $this->sender->send($mailing);
         } catch (\Throwable $failure) {
             $this->errors->fail($this->translator->trans('Sending a scheduled report'), $failure);
 
             return $back;
         }
 
-        $mailing->setLastSentAt($now)->save();
+        if (null === $result) {
+            $this->flash->add($request, 'warning', $this->translator->trans('The report is being sent by a scheduled run: nothing was sent, try again in a few minutes.'));
+
+            return $back;
+        }
+
         $this->adminLogger->log(self::RESOURCE, AccessManager::UPDATE, \sprintf('Scheduled report %s sent now', (string) $mailing->getTitle()), $id);
         $this->flash->add(
             $request,
