@@ -9,7 +9,7 @@
 
 {% import '@BackOfficeDefaultTwig/reports/_sales_macros.html.twig' as sales %}
 
-{% block title %}{{ 'Sales'|trans }}{% endblock %}
+{% block title %}{{ 'Sales report'|trans }}{% endblock %}
 {% block body_testid %}reports-sales{% endblock %}
 
 {% block breadcrumb %}
@@ -17,14 +17,14 @@
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
             <li class="breadcrumb-item">{{ 'Reports'|trans }}</li>
-            <li class="breadcrumb-item active" aria-current="page">{{ 'Sales'|trans }}</li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Sales report'|trans }}</li>
         </ol>
     </nav>
 {% endblock %}
 
 {% block content %}
     <div class="container-fluid" data-testid="report-sales">
-        <h1 class="h3 mb-3">{{ 'Sales'|trans }}</h1>
+        <h1 class="h3 mb-3">{{ 'Sales report'|trans }}</h1>
 
         {% if report is null %}
             <div class="alert alert-warning d-flex align-items-start gap-2" data-testid="report-sales-unavailable">
