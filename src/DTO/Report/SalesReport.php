@@ -34,6 +34,7 @@ final readonly class SalesReport
      * @param array<string, mixed>|null                                            $reconciliation
      * @param array<string, mixed>|null                                            $pagination
      * @param array<string, mixed>|null                                            $export
+     * @param \DateTimeImmutable                                                   $computedAt     when the figures were computed: they are kept a few minutes
      */
     public function __construct(
         public string $tab,
@@ -61,6 +62,8 @@ final readonly class SalesReport
         public array $sortUrls,
         public string $currencyCode,
         public ?array $export,
+        public \DateTimeImmutable $computedAt,
+        public string $refreshUrl,
     ) {
     }
 }

@@ -147,6 +147,8 @@ return [
     'Discounts' => 'Remises',
     'Every order created in the period is counted, whatever its status.' => 'Toutes les commandes créées sur la période sont comptées, quel que soit leur statut.',
     'Reconciliation with the revenue' => 'Rapprochement avec le chiffre d\'affaires',
+    'Computed at %time%' => 'Calculé à %time%',
+    'Compute again' => 'Recalculer',
     'No sale in this period.' => 'Aucune vente sur cette période.',
     'Only the paid orders are counted: those paid, in processing or sent.' => 'Seules les commandes encaissées sont comptées : payées, en traitement ou expédiées.',
     'Orders counted' => 'Commandes comptées',

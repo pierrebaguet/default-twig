@@ -201,6 +201,37 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         self::assertCount(0, $this->client->getCrawler()->filter('[data-testid="report-export-button"]'), 'The export counts the paid orders: it is not offered beside every order.');
     }
 
+    public function testTheFiguresAreKeptUntilAnOrderChangesOrTheyAreComputedAgain(): void
+    {
+        $customer = $this->customer('Kept'.uniqid());
+        $this->paidOrder($customer, '1000000.000000', 1, '0');
+        $this->loginAs($this->factory->admin());
+
+        $this->assertPageRenders(self::CATEGORY_URL);
+        $first = $this->revenue();
+        self::assertStringContainsString('Computed at', $this->client->getCrawler()->filter('[data-testid="report-computed-at"]')->text());
+
+        // A line changed behind the orders' back: the orders are the same, the figures are kept.
+        $this->getPropelConnection()->exec("UPDATE order_product SET price = price + 500000 WHERE price = '1000000.000000'");
+        $this->assertPageRenders(self::CATEGORY_URL);
+        self::assertSame($first, $this->revenue(), 'The figures computed a moment ago are shown again.');
+
+        $refresh = (string) $this->client->getCrawler()->filter('[data-testid="report-refresh"]')->attr('href');
+        self::assertStringContainsString('refresh=1', $refresh);
+        $this->assertPageRenders($refresh);
+        $refreshed = $this->revenue();
+        self::assertGreaterThan($first, $refreshed, 'Computing again reads the line as it is now.');
+
+        $this->paidOrder($customer, '2000000.000000', 1, '0');
+        $this->assertPageRenders(self::CATEGORY_URL);
+        self::assertGreaterThan($refreshed, $this->revenue(), 'A new order is counted at once.');
+    }
+
+    private function revenue(): int
+    {
+        return (int) preg_replace('/\D/', '', $this->client->getCrawler()->filter('[data-testid="report-sales-revenue"]')->text());
+    }
+
     private function orderCount(): int
     {
         return (int) preg_replace('/\D/', '', $this->client->getCrawler()->filter('[data-testid="report-sales-orders"]')->text());

@@ -580,6 +580,17 @@ final class OrderRepository
     }
 
     /**
+     * Changes when an order is placed, updated or deleted: a figure computed over the orders
+     * and kept aside is stale as soon as it changes.
+     */
+    public function changeFingerprint(): string
+    {
+        $row = Propel::getConnection()->query('SELECT COUNT(*), MAX(id), MAX(updated_at) FROM `order`')->fetch(\PDO::FETCH_NUM);
+
+        return implode('|', array_map(static fn (mixed $value): string => (string) $value, \is_array($row) ? $row : []));
+    }
+
+    /**
      * Sum of computed totals on the orders created in $range the shop has been paid for.
      * Used by the dashboard revenue KPI.
      */

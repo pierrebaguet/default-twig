@@ -79,6 +79,11 @@
                     <span class="text-muted small" data-testid="report-range">
                         {{ report.range.from|format_date('medium') }} - {{ report.range.to|format_date('medium') }}
                     </span>
+                    <span class="text-muted small" data-testid="report-computed-at">
+                        {{ 'Computed at %time%'|trans({ '%time%': report.computedAt|format_time('short') }) }}
+                        &middot;
+                        <a href="{{ report.refreshUrl }}" class="text-decoration-none" data-testid="report-refresh">{{ 'Compute again'|trans }}</a>
+                    </span>
                     {% if report.export is not null %}
                         <form method="post" action="{{ report.export.url }}" data-testid="report-export-form">
                             <input type="hidden" name="_token" value="{{ assignToken() }}">
