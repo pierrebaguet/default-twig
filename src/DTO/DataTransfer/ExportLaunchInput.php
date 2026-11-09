@@ -22,7 +22,7 @@ use Thelia\Model\Lang;
 final readonly class ExportLaunchInput
 {
     /**
-     * @param array{start: array<mixed>, end: array<mixed>}|null $rangeDate as the form sends it
+     * @param array{start: array<mixed>|\DateTimeImmutable, end: array<mixed>|\DateTimeImmutable}|null $rangeDate as the form sends it: a year and a month, or exact days
      */
     public function __construct(
         public Lang $language,

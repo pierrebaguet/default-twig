@@ -63,6 +63,12 @@ final readonly class DataTransferLaunchInputReader
         $rangeDate = null;
         if ($request->request->all('range_date_start') !== [] && $request->request->all('range_date_end') !== []) {
             $rangeDate = ['start' => $request->request->all('range_date_start'), 'end' => $request->request->all('range_date_end')];
+        } elseif ($request->request->has('range_start') || $request->request->has('range_end')) {
+            // Exact days, as a report screen posts them: from the first second of the first day to the last of the last.
+            $rangeDate = $this->daysRange((string) $request->request->get('range_start', ''), (string) $request->request->get('range_end', ''));
+            if (null === $rangeDate) {
+                return new LaunchRefusal($this->translator->trans('The dates of the export are not valid.'));
+            }
         }
 
         return new ExportLaunchInput(
@@ -102,6 +108,21 @@ final readonly class DataTransferLaunchInputReader
         }
 
         return new ImportLaunchInput($file, $language);
+    }
+
+    /**
+     * @return array{start: \DateTimeImmutable, end: \DateTimeImmutable}|null null when a day is not a real Y-m-d date or the end precedes the start
+     */
+    private function daysRange(string $start, string $end): ?array
+    {
+        $from = \DateTimeImmutable::createFromFormat('!Y-m-d', $start);
+        $to = \DateTimeImmutable::createFromFormat('!Y-m-d', $end);
+
+        if (false === $from || false === $to || $from->format('Y-m-d') !== $start || $to->format('Y-m-d') !== $end || $from > $to) {
+            return null;
+        }
+
+        return ['start' => $from, 'end' => $to->setTime(23, 59, 59)];
     }
 
     private function language(Request $request): Lang|LaunchRefusal
