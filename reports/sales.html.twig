@@ -1,0 +1,288 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{#
+    Reports > Sales.
+
+    Expects `report`, a BackOfficeDefaultTwigBundle\DTO\Report\SalesReport, or null on a core that
+    predates the sales reports, and `current_tab` ('category', 'product' or 'customer').
+#}
+
+{% import '@BackOfficeDefaultTwig/reports/_sales_macros.html.twig' as sales %}
+
+{% block title %}{{ 'Sales'|trans }}{% endblock %}
+{% block body_testid %}reports-sales{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item">{{ 'Reports'|trans }}</li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Sales'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="container-fluid" data-testid="report-sales">
+        <h1 class="h3 mb-3">{{ 'Sales'|trans }}</h1>
+
+        {% if report is null %}
+            <div class="alert alert-warning d-flex align-items-start gap-2" data-testid="report-sales-unavailable">
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                <span>{{ 'This screen needs a more recent version of Thelia.'|trans }}</span>
+            </div>
+        {% else %}
+            {% set currency = report.currencyCode %}
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div class="d-flex flex-wrap gap-1" data-testid="report-period-options">
+                    {% for option in report.periodOptions %}
+                        <a href="{{ option.url }}" class="btn btn-sm {{ option.active ? 'btn-primary' : 'btn-outline-secondary' }}"
+                           data-testid="report-period-{{ option.value }}"{% if option.active %} aria-current="true"{% endif %}>{{ option.label }}</a>
+                    {% endfor %}
+                </div>
+
+                <form method="get" action="{{ report.formUrl }}" class="d-flex flex-wrap align-items-center gap-2" data-testid="report-custom-period">
+                    <input type="hidden" name="period" value="custom">
+                    {% for name, value in report.formFields %}
+                        <input type="hidden" name="{{ name }}" value="{{ value }}">
+                    {% endfor %}
+                    <label for="report-from" class="form-label small mb-0">{{ 'From'|trans }}</label>
+                    <input type="date" id="report-from" name="from" class="form-control form-control-sm w-auto" required
+                           max="{{ 'now'|date('Y-m-d') }}" value="{{ report.range.from|date('Y-m-d') }}" data-testid="report-from">
+                    <label for="report-to" class="form-label small mb-0">{{ 'to'|trans }}</label>
+                    <input type="date" id="report-to" name="to" class="form-control form-control-sm w-auto" required
+                           max="{{ 'now'|date('Y-m-d') }}" value="{{ report.range.to|date('Y-m-d') }}" data-testid="report-to">
+                    <button type="submit" class="btn btn-sm btn-outline-primary" data-testid="report-apply">{{ 'Apply'|trans }}</button>
+                </form>
+            </div>
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="{{ 'Orders counted'|trans }}" data-testid="report-scope-options">
+                        {% for option in report.scopeOptions %}
+                            <a href="{{ option.url }}" class="btn {{ option.active ? 'btn-primary' : 'btn-outline-secondary' }}"
+                               data-testid="report-scope-{{ option.value }}"{% if option.active %} aria-current="true"{% endif %}>{{ option.label }}</a>
+                        {% endfor %}
+                    </div>
+                    <span class="text-muted small" data-testid="report-scope-label">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        {% if report.allOrders %}
+                            {{ 'Every order created in the period is counted, whatever its status.'|trans }}
+                        {% else %}
+                            {{ 'Only the paid orders are counted: those paid, in processing or sent.'|trans }}
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <span class="text-muted small" data-testid="report-range">
+                        {{ report.range.from|format_date('medium') }} - {{ report.range.to|format_date('medium') }}
+                    </span>
+                    {% if report.export is not null %}
+                        <form method="post" action="{{ report.export.url }}" data-testid="report-export-form">
+                            <input type="hidden" name="_token" value="{{ assignToken() }}">
+                            <input type="hidden" name="serializer" value="thelia.csv">
+                            <input type="hidden" name="language" value="{{ report.export.languageId }}">
+                            <input type="hidden" name="range_start" value="{{ report.export.from }}">
+                            <input type="hidden" name="range_end" value="{{ report.export.to }}">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm" data-testid="report-export-button">
+                                <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                {{ 'Export'|trans }}
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-body d-flex flex-wrap align-items-center gap-5">
+                    <div>
+                        <div class="text-muted small">{{ 'Revenue incl. tax'|trans }}</div>
+                        <div class="display-6 fw-semibold" data-testid="report-sales-revenue">{{ report.revenue|format_currency(currency) }}</div>
+                        <div class="small" data-testid="report-sales-revenue-variation">
+                            {{ sales.variation(report.revenueVariation) }}
+                            <span class="text-muted">{{ 'vs %amount%'|trans({ '%amount%': report.previousRevenue|format_currency(currency) }) }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted small">{{ 'Orders'|trans }}</div>
+                        <div class="display-6 fw-semibold" data-testid="report-sales-orders">{{ report.orderCount|number_format(0, ',', ' ') }}</div>
+                        <div class="small" data-testid="report-sales-orders-variation">
+                            {{ sales.variation(report.orderVariation) }}
+                            <span class="text-muted">{{ 'vs %count%'|trans({ '%count%': report.previousOrderCount|number_format(0, ',', ' ') }) }}</span>
+                        </div>
+                    </div>
+                    <div class="text-muted small" data-testid="report-sales-previous">
+                        {{ 'Previous period'|trans }} :
+                        {{ report.previousFrom|format_date('medium') }} - {{ report.previousTo|format_date('medium') }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="bo-tab-bar">
+                <ul class="nav nav-tabs" data-testid="report-sales-tabs">
+                    {% for tab in report.tabs %}
+                        <li class="nav-item">
+                            <a class="nav-link {{ tab.active ? 'active' : '' }}" href="{{ tab.url }}" data-testid="report-tab-{{ tab.key }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            {% if current_tab == 'category' %}
+                <p class="text-muted small mt-3 mb-2" data-testid="report-category-note">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    {{ 'Current category of the product, not the one of the day of the sale.'|trans }}
+                </p>
+
+                <div class="card shadow-sm border-0">
+                    <div class="list-group list-group-flush" data-testid="report-category-tree">
+                        <div class="list-group-item bg-light d-none d-md-block">
+                            <div class="row g-2 fw-semibold small">
+                                <span class="col-md-4">{{ 'Category'|trans }}</span>
+                                <span class="col-md-2 text-md-end">{{ 'Revenue incl. tax'|trans }}</span>
+                                <span class="col-md-2 text-md-end">{{ 'Previous period'|trans }}</span>
+                                <span class="col-md-1 text-md-end">{{ 'Change'|trans }}</span>
+                                <span class="col-md-1 text-md-end">{{ 'Quantity'|trans }}</span>
+                                <span class="col-md-1 text-md-end">{{ 'Orders'|trans }}</span>
+                                <span class="col-md-1 text-md-end">{{ 'Share'|trans }}</span>
+                            </div>
+                        </div>
+                        {% for node in report.categoryTree %}
+                            {% include '@BackOfficeDefaultTwig/reports/_sales_category_node.html.twig' with { node: node, currency: currency, depth: 0 } only %}
+                        {% else %}
+                            <div class="list-group-item text-muted" data-testid="report-empty">{{ 'No sale in this period.'|trans }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {% if report.reconciliation is not null %}
+                    <div class="card shadow-sm border-0 mt-3">
+                        <div class="table-responsive">
+                        <table class="table align-middle mb-0 bo-table-wrap" data-testid="report-reconciliation">
+                            <caption class="caption-top px-3 pt-3 fw-semibold text-body">{{ 'Reconciliation with the revenue'|trans }}</caption>
+                            <tbody>
+                                <tr data-testid="report-reconciliation-lines">
+                                    <th scope="row" class="fw-normal">{{ 'Total of the lines'|trans }}</th>
+                                    <td class="text-end">{{ report.reconciliation.linesTotal|format_currency(currency) }}</td>
+                                </tr>
+                                <tr data-testid="report-reconciliation-discounts">
+                                    <th scope="row" class="fw-normal">{{ 'Discounts'|trans }}</th>
+                                    <td class="text-end">- {{ report.reconciliation.discounts|format_currency(currency) }}</td>
+                                </tr>
+                                <tr data-testid="report-reconciliation-postage">
+                                    <th scope="row" class="fw-normal">{{ 'Shipping costs'|trans }}</th>
+                                    <td class="text-end">+ {{ report.reconciliation.postage|format_currency(currency) }}</td>
+                                </tr>
+                                <tr class="table-light" data-testid="report-reconciliation-total">
+                                    <th scope="row">{{ 'Total'|trans }}</th>
+                                    <td class="text-end fw-semibold">{{ report.reconciliation.revenue|format_currency(currency) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        </div>
+                    </div>
+                {% endif %}
+            {% elseif current_tab == 'product' %}
+                <p class="text-muted small mt-3 mb-2" data-testid="report-product-note">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    {{ 'Amounts are the lines of the orders, incl. tax, before discount and shipping costs.'|trans }}
+                </p>
+                <div class="card shadow-sm border-0">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 bo-table-wrap" data-testid="report-product-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col" class="d-none d-md-table-cell">{{ 'Reference'|trans }}</th>
+                                    <th scope="col">{{ 'Product'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Quantity'|trans }}</th>
+                                    <th scope="col" class="text-end text-wrap">{{ 'Revenue incl. tax'|trans }}</th>
+                                    <th scope="col" class="text-end d-none d-md-table-cell">{{ 'Previous period'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Change'|trans }}</th>
+                                    <th scope="col" class="text-end d-none d-md-table-cell">{{ 'Share'|trans }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report.rows %}
+                                    {% set row = item.row %}
+                                    <tr data-testid="report-product-row">
+                                        <td class="d-none d-md-table-cell"><code>{{ row.ref }}</code></td>
+                                        <td>
+                                            {% if row.productId is not null and is_granted('VIEW', 'admin.product') %}
+                                                <a href="{{ path('admin.products.update', { product_id: row.productId }) }}" class="text-decoration-none" data-testid="report-product-link">{{ row.title }}</a>
+                                            {% else %}
+                                                {{ row.title }}
+                                            {% endif %}
+                                            <div class="d-md-none"><code class="small">{{ row.ref }}</code></div>
+                                        </td>
+                                        <td class="text-end">{{ row.quantity|number_format(0, ',', ' ') }}</td>
+                                        <td class="text-end">{{ row.revenue|format_currency(currency) }}</td>
+                                        <td class="text-end text-muted d-none d-md-table-cell">{{ row.previousRevenue|format_currency(currency) }}</td>
+                                        <td class="text-end">{{ sales.variation(item.variation) }}</td>
+                                        <td class="text-end d-none d-md-table-cell">{{ (row.share * 100)|number_format(1, ',', ' ') }} %</td>
+                                    </tr>
+                                {% else %}
+                                    <tr><td colspan="7" class="text-muted" data-testid="report-empty">{{ 'No sale in this period.'|trans }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% else %}
+                <div class="card shadow-sm border-0 mt-3">
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 bo-table-wrap" data-testid="report-customer-table">
+                            <thead class="table-light">
+                                <tr>
+                                    {% for column, label in { name: 'Customer'|trans, orders: 'Orders'|trans, total: 'Total incl. tax'|trans, average: 'Average basket'|trans, last_order: 'Last order'|trans } %}
+                                        <th scope="col" class="{{ column != 'name' ? 'text-end' }}{{ column in ['orders', 'average', 'last_order'] ? ' d-none d-md-table-cell' }}{{ column == 'total' ? ' text-wrap' }}">
+                                            <a href="{{ report.sortUrls[column] }}" class="text-decoration-none text-reset d-inline-flex align-items-center gap-1" data-testid="sort-{{ column }}">
+                                                {{ label }}
+                                                <i class="bi {{ report.sort == column ? (report.direction == 'asc' ? 'bi-sort-up' : 'bi-sort-down') : 'bi-arrow-down-up text-muted' }}" aria-hidden="true"></i>
+                                            </a>
+                                        </th>
+                                    {% endfor %}
+                                    <th scope="col" class="text-end d-none d-md-table-cell">{{ 'Previous period'|trans }}</th>
+                                    <th scope="col" class="text-end">{{ 'Change'|trans }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in report.rows %}
+                                    {% set row = item.row %}
+                                    <tr data-testid="report-customer-row">
+                                        <td>
+                                            <a href="{{ path('admin.customer.update.view', { customer_id: row.customerId }) }}" class="text-decoration-none" data-testid="report-customer-link">{{ row.firstname }} {{ row.lastname }}</a>
+                                            <span class="text-muted small">({{ row.ref }})</span>
+                                            <div class="text-muted small text-break" data-testid="report-customer-email">{{ row.email }}</div>
+                                            <div class="text-muted small d-md-none">{{ 'Orders'|trans }} : {{ row.orderCount|number_format(0, ',', ' ') }}</div>
+                                        </td>
+                                        <td class="text-end d-none d-md-table-cell">{{ row.orderCount|number_format(0, ',', ' ') }}</td>
+                                        <td class="text-end" data-testid="report-customer-total">{{ row.total|format_currency(currency) }}</td>
+                                        <td class="text-end d-none d-md-table-cell">{{ row.averageBasket|format_currency(currency) }}</td>
+                                        <td class="text-end d-none d-md-table-cell">{{ row.lastOrderAt|format_date('medium') }}</td>
+                                        <td class="text-end text-muted d-none d-md-table-cell">{{ row.previousTotal|format_currency(currency) }}</td>
+                                        <td class="text-end">{{ sales.variation(item.variation) }}</td>
+                                    </tr>
+                                {% else %}
+                                    <tr><td colspan="7" class="text-muted" data-testid="report-empty">{{ 'No sale in this period.'|trans }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if report.pagination is not null %}
+                {{ component('BoPagination', {
+                    route: report.pagination.route,
+                    currentPage: report.pagination.current,
+                    lastPage: report.pagination.last,
+                    routeParams: report.pagination.params,
+                    ariaLabel: 'Sales report pagination',
+                    testid: 'report-pagination',
+                }) }}
+            {% endif %}
+        {% endif %}
+    </div>
+{% endblock %}
