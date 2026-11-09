@@ -1,0 +1,8 @@
+{#- The change against the previous period, "-" when that period sold nothing. -#}
+{% macro variation(value) %}
+    {%- if value is null -%}
+        <span class="text-muted">-</span>
+    {%- else -%}
+        <span class="{{ value > 0 ? 'text-success' : (value < 0 ? 'text-danger' : 'text-muted') }}">{{ value > 0 ? '+' : '' }}{{ value|number_format(1, ',', ' ') }} %</span>
+    {%- endif -%}
+{% endmacro %}

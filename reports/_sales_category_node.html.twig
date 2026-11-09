@@ -1,0 +1,34 @@
+{#
+    One category of the sales by category and, folded under it, its subcategories.
+
+    Expects `node` (row, variation, children), `currency` and `depth`.
+#}
+{% import '@BackOfficeDefaultTwig/reports/_sales_macros.html.twig' as sales %}
+{% set row = node.row %}
+{% set kind = row.kind.value %}
+{% set title = kind == 'uncategorized' ? 'Uncategorized goods'|trans : (kind == 'services' ? 'Services'|trans : row.title) %}
+{% set cells %}
+    <span class="col-12 col-md-4 fw-semibold" data-testid="sales-category-title">{{ title }}</span>
+    <span class="col-6 col-md-2 text-md-end" data-testid="sales-category-revenue"><span class="d-block d-md-none text-muted small">{{ 'Revenue incl. tax'|trans }}</span>{{ row.revenue|format_currency(currency) }}</span>
+    <span class="col-6 col-md-2 text-md-end text-muted"><span class="d-block d-md-none small">{{ 'Previous period'|trans }}</span>{{ row.previousRevenue|format_currency(currency) }}</span>
+    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Change'|trans }}</span>{{ sales.variation(node.variation) }}</span>
+    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Quantity'|trans }}</span>{{ row.quantity|number_format(0, ',', ' ') }}</span>
+    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Orders'|trans }}</span>{{ row.orderCount|number_format(0, ',', ' ') }}</span>
+    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Share'|trans }}</span>{{ (row.share * 100)|number_format(1, ',', ' ') }} %</span>
+{% endset %}
+{% if node.children is empty %}
+    <div class="list-group-item" data-testid="sales-category-row" data-category-kind="{{ kind }}">
+        <div class="row g-2 align-items-center ms-{{ min(depth, 5) }}">{{ cells }}</div>
+    </div>
+{% else %}
+    <details class="list-group-item" data-testid="sales-category-row" data-category-kind="{{ kind }}" open>
+        <summary>
+            <span class="row g-2 align-items-center d-inline-flex w-100 ms-{{ min(depth, 5) }}">{{ cells }}</span>
+        </summary>
+        <div class="list-group list-group-flush mt-2">
+            {% for child in node.children %}
+                {% include '@BackOfficeDefaultTwig/reports/_sales_category_node.html.twig' with { node: child, currency: currency, depth: depth + 1 } only %}
+            {% endfor %}
+        </div>
+    </details>
+{% endif %}
