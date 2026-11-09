@@ -17,8 +17,12 @@ namespace BackOfficeDefaultTwigBundle\Service\Report;
 use BackOfficeDefaultTwigBundle\DTO\Dashboard\DateRange;
 use BackOfficeDefaultTwigBundle\DTO\Report\SalesReport;
 use BackOfficeDefaultTwigBundle\Repository\DataTransferRepository;
+use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Service\Dashboard\PeriodOptions;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
@@ -49,6 +53,13 @@ final readonly class SalesReportProvider
 
     public const PER_PAGE = 25;
 
+    /**
+     * Three years of orders take seconds to add up: the figures are kept this long, under a key
+     * that changes with the orders (see OrderRepository::changeFingerprint()), and the screen says
+     * when they were computed.
+     */
+    public const KEPT_SECONDS = 900;
+
     private const SCOPE_ALL = 'all';
 
     private const SCOPE_PAID = 'paid';
@@ -71,7 +82,10 @@ final readonly class SalesReportProvider
 
     public function __construct(
         private AdminSaleUnitScope $saleUnitScope,
+        private CacheInterface $cache,
+        private ClockInterface $clock,
         private DataTransferRepository $dataTransfers,
+        private OrderRepository $orders,
         private PeriodOptions $periodOptions,
         private SecurityContext $securityContext,
         private TranslatorInterface $translator,
@@ -92,9 +106,8 @@ final readonly class SalesReportProvider
         return \in_array($requested, self::CUSTOMER_SORTS, true) ? (string) $requested : self::SORT_DEFAULT;
     }
 
-    public function compute(string $tab, DateRange $range, bool $allOrders, string $sort, ?string $direction, int $page, string $locale): SalesReport
+    public function compute(string $tab, DateRange $range, bool $allOrders, string $sort, ?string $direction, int $page, string $locale, bool $refresh = false): SalesReport
     {
-        $calculator = $this->calculator();
         $criteria = new \Thelia\Domain\Report\Sales\SalesReportCriteria(
             $range->from,
             $range->to,
@@ -102,18 +115,28 @@ final readonly class SalesReportProvider
             $this->saleUnitScope->allowedSaleUnitIds(),
         );
         $previous = $criteria->previous();
-
-        $current = $calculator->reconciliation($criteria);
-        $before = $calculator->reconciliation($previous);
-
         $descending = \in_array($direction, ['asc', 'desc'], true) ? 'desc' === $direction : 'name' !== $sort;
+
+        $key = 'bo_sales_report_'.hash('xxh128', serialize([
+            $tab, $criteria->from->format(\DATE_ATOM), $criteria->to->format(\DATE_ATOM), $criteria->scope->value,
+            $criteria->saleUnitIds, $sort, $descending, $page, $locale, $this->orders->changeFingerprint(),
+        ]));
+
+        if ($refresh) {
+            $this->cache->delete($key);
+        }
+
+        $figures = $this->cache->get($key, fn (ItemInterface $item): array => $this->figures($item, $tab, $criteria, $previous, $sort, $descending, $page, $locale));
+
+        $current = $figures['current'];
+        $before = $figures['before'];
         $categoryTree = [];
         $rows = [];
         $reconciliation = null;
         $pagination = null;
 
         if (self::TAB_CATEGORY === $tab) {
-            $categoryTree = $this->tree($calculator->byCategory($criteria, $locale));
+            $categoryTree = $this->tree($figures['result']);
             $reconciliation = [
                 'linesTotal' => $current->linesTotal,
                 'discounts' => $current->discounts,
@@ -121,11 +144,11 @@ final readonly class SalesReportProvider
                 'revenue' => $current->revenue,
             ];
         } elseif (self::TAB_PRODUCT === $tab) {
-            $result = $calculator->byProduct($criteria, $locale, $page, self::PER_PAGE);
+            $result = $figures['result'];
             $rows = array_map(static fn ($row): array => ['row' => $row, 'variation' => self::variation($row->revenue, $row->previousRevenue)], $result->rows);
             $pagination = $this->pagination($result, $tab, $range, $allOrders, $sort, $descending);
         } else {
-            $result = $calculator->byCustomer($criteria, \Thelia\Domain\Report\Sales\CustomerSort::from($sort), $descending, $page, self::PER_PAGE);
+            $result = $figures['result'];
             $rows = array_map(static fn ($row): array => ['row' => $row, 'variation' => self::variation($row->total, $row->previousTotal)], $result->rows);
             $pagination = $this->pagination($result, $tab, $range, $allOrders, $sort, $descending);
         }
@@ -156,7 +179,29 @@ final readonly class SalesReportProvider
             sortUrls: self::TAB_CUSTOMER === $tab ? $this->sortUrls($range, $allOrders, $sort, $descending) : [],
             currencyCode: (string) \Thelia\Model\Currency::getDefaultCurrency()->getCode(),
             export: $allOrders ? null : $this->export($tab, $range, $locale),
+            computedAt: $figures['computedAt'],
+            refreshUrl: $this->urls->generate(self::ROUTES[$tab], $this->periodParameters($range) + $this->keptParameters($allOrders, $tab, $sort, $descending) + ($page > 1 ? ['page' => (string) $page] : []) + ['refresh' => '1']),
         );
+    }
+
+    /**
+     * @return array{computedAt: \DateTimeImmutable, current: object, before: object, result: mixed}
+     */
+    private function figures(ItemInterface $item, string $tab, object $criteria, object $previous, string $sort, bool $descending, int $page, string $locale): array
+    {
+        $item->expiresAfter(self::KEPT_SECONDS);
+        $calculator = $this->calculator();
+
+        return [
+            'computedAt' => $this->clock->now(),
+            'current' => $calculator->reconciliation($criteria),
+            'before' => $calculator->reconciliation($previous),
+            'result' => match ($tab) {
+                self::TAB_CATEGORY => $calculator->byCategory($criteria, $locale),
+                self::TAB_PRODUCT => $calculator->byProduct($criteria, $locale, $page, self::PER_PAGE),
+                default => $calculator->byCustomer($criteria, \Thelia\Domain\Report\Sales\CustomerSort::from($sort), $descending, $page, self::PER_PAGE),
+            },
+        ];
     }
 
     private function calculator(): object

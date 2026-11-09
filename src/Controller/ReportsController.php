@@ -104,6 +104,7 @@ final class ReportsController
             $request->query->getString('dir') ?: null,
             max(1, $request->query->getInt('page', 1)),
             $request->getLocale(),
+            $request->query->getBoolean('refresh'),
         );
 
         return new Response($this->twig->render('@BackOfficeDefaultTwig/reports/sales.html.twig', [
