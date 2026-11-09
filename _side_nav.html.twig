@@ -111,7 +111,7 @@
                     <ul class="nav flex-column collapse {{ active ? 'show' : '' }}" id="bo-nav-reports-collapse">
                         <li><a class="nav-link" href="{{ path('admin.reports.conversion') }}">{{ 'Conversion'|trans }}</a></li>
                         {% if sales_reports_available() %}
-                            <li><a class="nav-link" href="{{ path('admin.reports.sales.category') }}" data-testid="bo-nav-sales-report">{{ 'Sales'|trans }}</a></li>
+                            <li><a class="nav-link" href="{{ path('admin.reports.sales.category') }}" data-testid="bo-nav-sales-report">{{ 'Sales report'|trans }}</a></li>
                         {% endif %}
                         {% for fragment in hook_block('main.top-menu-reports', { fields: 'id,class,url,title' }) %}
                             <li><a class="nav-link" href="{{ fragment.url }}"{% if fragment.id %} id="{{ fragment.id }}"{% endif %}>{{ fragment.title }}</a></li>
