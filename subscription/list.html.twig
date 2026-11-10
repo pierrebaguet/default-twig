@@ -32,17 +32,21 @@
 
         <form method="get" action="{{ path('admin.subscription.list') }}" class="bo-order-filters" data-testid="subscription-search-form">
             <div class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label" for="subscription-filter-customer">{{ 'Customer'|trans }}</label>
-                    <input type="search" id="subscription-filter-customer" name="customer" value="{{ filters.customer_input }}"
-                           class="form-control" placeholder="{{ 'Name or email'|trans }}" data-testid="subscription-filter-customer">
+                <div class="col-md-5">
+                    <label class="form-label" for="subscription-filter-q">{{ 'Search'|trans }}</label>
+                    <input type="search" id="subscription-filter-q" name="q" value="{{ filters.search_input }}"
+                           class="form-control" placeholder="{{ 'Reference, customer name or email'|trans }}" data-testid="subscription-filter-q">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" for="subscription-filter-ref">{{ 'Reference'|trans }}</label>
-                    <input type="search" id="subscription-filter-ref" name="ref" value="{{ filters.ref_input }}"
-                           class="form-control" data-testid="subscription-filter-ref">
+                    <label class="form-label" for="subscription-filter-plan">{{ 'Plan'|trans }}</label>
+                    <select id="subscription-filter-plan" name="plan" class="form-select" data-testid="subscription-filter-plan">
+                        <option value="">{{ 'All plans'|trans }}</option>
+                        {% for option in filters.plan_options %}
+                            <option value="{{ option.id }}" {{ option.id == filters.selected_plan_id ? 'selected' : '' }}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-                <div class="col-md-5 d-flex align-items-end gap-2">
+                <div class="col-md-4 d-flex align-items-end gap-2">
                     <button type="submit" class="btn btn-primary flex-grow-1" data-testid="subscription-search-submit">
                         <i class="bi bi-funnel me-1" aria-hidden="true"></i>{{ 'Apply'|trans }}
                     </button>

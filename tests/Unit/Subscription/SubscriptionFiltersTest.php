@@ -47,6 +47,12 @@ final class SubscriptionFiltersTest extends TestCase
         self::assertNull($broken->nextBillingTo);
     }
 
+    public function testAPlanThatIsNotAPositiveNumberIsIgnored(): void
+    {
+        self::assertNull(SubscriptionFilters::fromRequest(new Request(['plan' => 'abc']))->planId);
+        self::assertNull(SubscriptionFilters::fromRequest(new Request(['plan' => '-2']))->planId);
+    }
+
     public function testASortOutsideTheAllowedOnesFallsBack(): void
     {
         $filters = SubscriptionFilters::fromRequest(new Request(['order' => 'password; drop', 'direction' => 'sideways']));
@@ -58,24 +64,26 @@ final class SubscriptionFiltersTest extends TestCase
 
     public function testTheQueryParametersRoundTrip(): void
     {
-        $request = new Request(['status' => ['active'], 'customer' => ' Ada ', 'customer_id' => '7', 'ref' => 'SUB1', 'next_from' => '2031-01-01', 'order' => 'ref', 'direction' => 'asc']);
+        $request = new Request(['status' => ['active'], 'q' => ' Ada ', 'customer_id' => '7', 'plan' => '3', 'next_from' => '2031-01-01', 'order' => 'ref', 'direction' => 'asc']);
         $filters = SubscriptionFilters::fromRequest($request);
 
         $again = SubscriptionFilters::fromRequest(new Request($filters->toQueryParams()));
 
         self::assertEquals($filters, $again);
-        self::assertSame('Ada', $filters->customer);
+        self::assertSame('Ada', $filters->search);
         self::assertSame(7, $filters->customerId);
+        self::assertSame(3, $filters->planId);
     }
 
     public function testEachFilterIsRemovedOnItsOwn(): void
     {
-        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['active'], 'customer' => 'Ada', 'customer_id' => '7', 'ref' => 'X', 'next_from' => '2031-01-01', 'next_to' => '2031-02-01']));
+        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['active'], 'q' => 'Ada', 'customer_id' => '7', 'plan' => '4', 'next_from' => '2031-01-01', 'next_to' => '2031-02-01']));
 
         self::assertSame([], $filters->withoutFilter(SubscriptionFilters::KEY_STATUSES)->statuses);
-        self::assertSame('', $filters->withoutFilter(SubscriptionFilters::KEY_CUSTOMER)->customer);
+        self::assertSame('', $filters->withoutFilter(SubscriptionFilters::KEY_SEARCH)->search);
         self::assertNull($filters->withoutFilter(SubscriptionFilters::KEY_CUSTOMER_ID)->customerId);
-        self::assertSame('', $filters->withoutFilter(SubscriptionFilters::KEY_REF)->ref);
+        self::assertNull($filters->withoutFilter(SubscriptionFilters::KEY_PLAN)->planId);
+        self::assertSame(7, $filters->withoutFilter(SubscriptionFilters::KEY_PLAN)->customerId, 'The others stay.');
         $noDates = $filters->withoutFilter(SubscriptionFilters::KEY_NEXT_BILLING);
         self::assertNull($noDates->nextBillingFrom);
         self::assertNull($noDates->nextBillingTo);

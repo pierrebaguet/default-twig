@@ -3922,7 +3922,7 @@ return [
     'Change' => 'Changement',
     'By' => 'Par',
     'No history yet.' => 'Aucun historique.',
-    'Name or email' => 'Nom ou courriel',
+    'All plans' => 'Tous les plans',
     'Next billing between' => 'Prochaine échéance entre le',
     'No subscription matches the current filters.' => 'Aucun abonnement ne correspond aux filtres.',
     'Cancel this subscription' => 'Résilier cet abonnement',

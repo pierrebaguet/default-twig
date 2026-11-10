@@ -33,6 +33,7 @@ final readonly class SubscriptionFilterPresenter
         private UrlGeneratorInterface $urls,
         private TranslatorInterface $translator,
         private SubscriptionLabels $labels,
+        private SubscriptionFilterCatalog $catalog,
     ) {
     }
 
@@ -75,16 +76,17 @@ final readonly class SubscriptionFilterPresenter
         return [
             'quick_chips' => $chips,
             'status_options' => $statusOptions,
-            'customer_input' => $filters->customer,
+            'search_input' => $filters->search,
             'customer_id' => $filters->customerId,
-            'ref_input' => $filters->ref,
+            'plan_options' => $this->catalog->plans($locale),
+            'selected_plan_id' => $filters->planId,
             'next_from_input' => $filters->nextBillingFrom?->format('Y-m-d') ?? '',
             'next_to_input' => $filters->nextBillingTo?->format('Y-m-d') ?? '',
             'active_chips' => $this->activeChips($filters, $locale),
             'clear_all_url' => $this->urls->generate(self::LIST_ROUTE),
             'sort_field' => $filters->sort,
             'sort_direction' => $filters->direction,
-            'advanced_count' => (int) (null !== $filters->nextBillingFrom || null !== $filters->nextBillingTo) + (int) ('' !== $filters->ref),
+            'advanced_count' => (int) (null !== $filters->nextBillingFrom || null !== $filters->nextBillingTo) + (int) (null !== $filters->planId),
         ];
     }
 
@@ -104,16 +106,22 @@ final readonly class SubscriptionFilterPresenter
             );
         }
 
-        if ('' !== $filters->customer) {
-            $chips[] = $this->chip($filters, SubscriptionFilters::KEY_CUSTOMER, $this->translator->trans('Customer'), $filters->customer);
+        if ('' !== $filters->search) {
+            $chips[] = $this->chip($filters, SubscriptionFilters::KEY_SEARCH, $this->translator->trans('Search'), $filters->search);
         }
 
         if (null !== $filters->customerId) {
             $chips[] = $this->chip($filters, SubscriptionFilters::KEY_CUSTOMER_ID, $this->translator->trans('Customer'), '#'.$filters->customerId);
         }
 
-        if ('' !== $filters->ref) {
-            $chips[] = $this->chip($filters, SubscriptionFilters::KEY_REF, $this->translator->trans('Reference'), $filters->ref);
+        if (null !== $filters->planId) {
+            $label = '#'.$filters->planId;
+            foreach ($this->catalog->plans($locale) as $option) {
+                if ($option['id'] === $filters->planId) {
+                    $label = $option['label'];
+                }
+            }
+            $chips[] = $this->chip($filters, SubscriptionFilters::KEY_PLAN, $this->translator->trans('Plan'), $label);
         }
 
         if (null !== $filters->nextBillingFrom || null !== $filters->nextBillingTo) {

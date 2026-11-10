@@ -34,9 +34,9 @@ final readonly class SubscriptionFilters
     public const ALLOWED_DIRECTIONS = ['asc', 'desc'];
 
     public const KEY_STATUSES = 'statuses';
-    public const KEY_CUSTOMER = 'customer';
+    public const KEY_SEARCH = 'q';
+    public const KEY_PLAN = 'plan';
     public const KEY_CUSTOMER_ID = 'customer_id';
-    public const KEY_REF = 'ref';
     public const KEY_NEXT_BILLING = 'next_billing';
 
     /**
@@ -44,9 +44,9 @@ final readonly class SubscriptionFilters
      */
     public function __construct(
         public array $statuses = [],
-        public string $customer = '',
+        public string $search = '',
         public ?int $customerId = null,
-        public string $ref = '',
+        public ?int $planId = null,
         public ?\DateTimeImmutable $nextBillingFrom = null,
         public ?\DateTimeImmutable $nextBillingTo = null,
         public string $sort = self::DEFAULT_SORT,
@@ -75,12 +75,13 @@ final readonly class SubscriptionFilters
         $sort = (string) $query->get('order', self::DEFAULT_SORT);
         $direction = strtolower((string) $query->get('direction', self::DEFAULT_DIRECTION));
         $customerId = (int) $query->get('customer_id', 0);
+        $planId = (int) $query->get('plan', 0);
 
         return new self(
             statuses: $statuses,
-            customer: trim((string) $query->get('customer', '')),
+            search: trim((string) $query->get('q', '')),
             customerId: $customerId > 0 ? $customerId : null,
-            ref: trim((string) $query->get('ref', '')),
+            planId: $planId > 0 ? $planId : null,
             nextBillingFrom: $from,
             nextBillingTo: $to,
             sort: \in_array($sort, self::ALLOWED_SORTS, true) ? $sort : self::DEFAULT_SORT,
@@ -91,9 +92,9 @@ final readonly class SubscriptionFilters
     public function isEmpty(): bool
     {
         return [] === $this->statuses
-            && '' === $this->customer
+            && '' === $this->search
             && null === $this->customerId
-            && '' === $this->ref
+            && null === $this->planId
             && null === $this->nextBillingFrom
             && null === $this->nextBillingTo;
     }
@@ -110,14 +111,14 @@ final readonly class SubscriptionFilters
         if ([] !== $this->statuses) {
             $params['status'] = $this->statuses;
         }
-        if ('' !== $this->customer) {
-            $params['customer'] = $this->customer;
+        if ('' !== $this->search) {
+            $params['q'] = $this->search;
         }
         if (null !== $this->customerId) {
             $params['customer_id'] = $this->customerId;
         }
-        if ('' !== $this->ref) {
-            $params['ref'] = $this->ref;
+        if (null !== $this->planId) {
+            $params['plan'] = $this->planId;
         }
         if (null !== $this->nextBillingFrom) {
             $params['next_from'] = $this->nextBillingFrom->format('Y-m-d');
@@ -140,19 +141,36 @@ final readonly class SubscriptionFilters
      */
     public function withStatuses(array $statuses): self
     {
-        return new self($statuses, $this->customer, $this->customerId, $this->ref, $this->nextBillingFrom, $this->nextBillingTo, $this->sort, $this->direction);
+        return $this->with(statuses: $statuses);
     }
 
     public function withoutFilter(string $key): self
     {
         return match ($key) {
-            self::KEY_STATUSES => $this->withStatuses([]),
-            self::KEY_CUSTOMER => new self($this->statuses, '', $this->customerId, $this->ref, $this->nextBillingFrom, $this->nextBillingTo, $this->sort, $this->direction),
-            self::KEY_CUSTOMER_ID => new self($this->statuses, $this->customer, null, $this->ref, $this->nextBillingFrom, $this->nextBillingTo, $this->sort, $this->direction),
-            self::KEY_REF => new self($this->statuses, $this->customer, $this->customerId, '', $this->nextBillingFrom, $this->nextBillingTo, $this->sort, $this->direction),
-            self::KEY_NEXT_BILLING => new self($this->statuses, $this->customer, $this->customerId, $this->ref, null, null, $this->sort, $this->direction),
+            self::KEY_STATUSES => $this->with(statuses: []),
+            self::KEY_SEARCH => $this->with(search: ''),
+            self::KEY_CUSTOMER_ID => $this->with(customerId: null),
+            self::KEY_PLAN => $this->with(planId: null),
+            self::KEY_NEXT_BILLING => $this->with(nextBillingFrom: null, nextBillingTo: null),
             default => $this,
         };
+    }
+
+    /**
+     * @param list<string>|null $statuses
+     */
+    private function with(?array $statuses = null, ?string $search = null, int|false|null $customerId = false, int|false|null $planId = false, \DateTimeImmutable|false|null $nextBillingFrom = false, \DateTimeImmutable|false|null $nextBillingTo = false): self
+    {
+        return new self(
+            $statuses ?? $this->statuses,
+            $search ?? $this->search,
+            false === $customerId ? $this->customerId : $customerId,
+            false === $planId ? $this->planId : $planId,
+            false === $nextBillingFrom ? $this->nextBillingFrom : $nextBillingFrom,
+            false === $nextBillingTo ? $this->nextBillingTo : $nextBillingTo,
+            $this->sort,
+            $this->direction,
+        );
     }
 
     private static function parseDate(string $value, bool $endOfDay): ?\DateTimeImmutable

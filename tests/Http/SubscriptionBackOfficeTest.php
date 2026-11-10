@@ -82,7 +82,7 @@ final class SubscriptionBackOfficeTest extends WebIntegrationTestCase
         $active = $this->aSubscriptionRow($customer, $product, $plan);
         $this->aSubscriptionRow($customer, $product, $plan, ['Status' => 'payment_failed']);
 
-        $crawler = $this->client->request('GET', '/admin/subscriptions?ref='.$active->getRef());
+        $crawler = $this->client->request('GET', '/admin/subscriptions?q='.$active->getRef());
         self::assertResponseIsSuccessful();
 
         self::assertCount(1, $crawler->filter('[data-testid="datatable-subscriptions-row"]'));
@@ -97,29 +97,64 @@ final class SubscriptionBackOfficeTest extends WebIntegrationTestCase
         self::assertSame($before['payment_failed'] + 1, $after['payment_failed']);
     }
 
-    public function testTheListFiltersOnStatusCustomerReferenceAndNextBillingDate(): void
+    public function testTheListFiltersOnStatusCustomerPlanAndNextBillingDate(): void
     {
         $this->asSuperAdministrator();
-        [$product, $plan] = $this->aProductWithAPlan();
+        [$product, $plan] = $this->aProductWithAPlan('Plan filter A');
+        [, $otherPlan] = $this->aProductWithAPlan('Plan filter B');
         $customer = $this->aCustomer('Yvonne', 'Filterable');
-        $other = $this->aCustomer('Xavier', 'Otherwise');
         $early = $this->aSubscriptionRow($customer, $product, $plan, ['NextBillingAt' => new \DateTime('2031-03-10 10:00:00')]);
         $late = $this->aSubscriptionRow($customer, $product, $plan, ['Status' => 'suspended', 'NextBillingAt' => new \DateTime('2031-09-10 10:00:00')]);
-        $foreign = $this->aSubscriptionRow($other, $product, $plan);
+        $onAnotherPlan = $this->aSubscriptionRow($customer, $product, $otherPlan);
 
         $refs = fn (string $query): array => $this->refsOf('/admin/subscriptions?customer_id='.$customer->getId().$query);
 
-        self::assertEqualsCanonicalizing([$early->getRef(), $late->getRef()], $refs(''));
+        self::assertEqualsCanonicalizing([$early->getRef(), $late->getRef(), $onAnotherPlan->getRef()], $refs(''));
         self::assertSame([$late->getRef()], $refs('&status[]=suspended'));
         self::assertSame([$early->getRef()], $refs('&next_from=2031-03-01&next_to=2031-04-01'));
         self::assertSame([$late->getRef()], $refs('&next_from=2031-08-01'));
-        self::assertSame([$early->getRef()], $refs('&ref='.$early->getRef()));
-        self::assertSame([$foreign->getRef()], $this->refsOf('/admin/subscriptions?customer=Xavier+Otherwise'));
+        self::assertSame([$onAnotherPlan->getRef()], $refs('&plan='.$otherPlan->getId()), 'The plan filter keeps the subscriptions taken on that plan.');
+        self::assertEqualsCanonicalizing([$early->getRef(), $late->getRef()], $refs('&plan='.$plan->getId()));
         self::assertSame([], $refs('&status[]=ended'), 'No match: the table is empty.');
-        self::assertSame([$early->getRef(), $late->getRef()], $refs('&order=next_billing_at&direction=asc'));
+        self::assertSame([$early->getRef(), $late->getRef()], $refs('&plan='.$plan->getId().'&order=next_billing_at&direction=asc'));
 
-        $crawler = $this->client->request('GET', '/admin/subscriptions?status[]=suspended&customer_id='.$customer->getId());
-        self::assertCount(2, $crawler->filter('[data-testid^="subscription-active-chip-"]'), 'One removable chip per filter in force.');
+        $crawler = $this->client->request('GET', '/admin/subscriptions?status[]=suspended&plan='.$plan->getId().'&customer_id='.$customer->getId());
+        self::assertCount(3, $crawler->filter('[data-testid^="subscription-active-chip-"]'), 'One removable chip per filter in force.');
+        self::assertStringContainsString('Plan filter A', $crawler->filter('[data-testid="subscription-active-chip-plan"]')->text());
+        self::assertGreaterThanOrEqual(2, $crawler->filter('[data-testid="subscription-filter-plan"] option')->count(), 'The dropdown lists the plans.');
+        self::assertSame((string) $plan->getId(), $crawler->filter('[data-testid="subscription-filter-plan"] option[selected]')->attr('value'));
+    }
+
+    public function testTheFreeSearchMatchesTheReferenceTheLastNameTheFirstNameAndTheEmailAndNothingElse(): void
+    {
+        $this->asSuperAdministrator();
+        [$product, $plan] = $this->aProductWithAPlan();
+        $unique = 'Qzx'.bin2hex(random_bytes(3));
+        $byLastName = $this->aCustomer('Plain', $unique.'son');
+        $byFirstName = $this->aCustomer($unique.'ette', 'Other');
+        $byEmail = $this->aCustomer('Mail', 'Holder');
+        $byEmail->setEmail('someone-'.$unique.'@example.test')->save($this->getPropelConnection());
+        $stranger = $this->aCustomer('Nobody', 'Related');
+        $rows = [
+            'last name' => $this->aSubscriptionRow($byLastName, $product, $plan),
+            'first name' => $this->aSubscriptionRow($byFirstName, $product, $plan),
+            'email' => $this->aSubscriptionRow($byEmail, $product, $plan),
+            'reference' => $this->aSubscriptionRow($stranger, $product, $plan, ['Ref' => 'SUB'.strtoupper($unique)]),
+        ];
+        $this->aSubscriptionRow($stranger, $product, $plan);
+
+        self::assertEqualsCanonicalizing(
+            array_map(static fn (Subscription $s): string => (string) $s->getRef(), array_values($rows)),
+            $this->refsOf('/admin/subscriptions?q='.$unique),
+            'The unique word is found in each of the four places, and the unrelated subscription is left out.',
+        );
+        self::assertSame([$rows['reference']->getRef()], $this->refsOf('/admin/subscriptions?q='.$rows['reference']->getRef()));
+        self::assertSame([], $this->refsOf('/admin/subscriptions?q='.$unique.'zzz'));
+
+        // The search is one group: it does not let the other filters through.
+        self::assertSame([$rows['email']->getRef()], $this->refsOf('/admin/subscriptions?q='.$unique.'&customer_id='.$byEmail->getId()));
+        self::assertSame([], $this->refsOf('/admin/subscriptions?q='.$unique.'&status[]=ended'));
+        self::assertSame([], $this->refsOf('/admin/subscriptions?q=100%25'), 'A percent sign is a character, not a wildcard.');
     }
 
     public function testTheDetailShowsTheValuesFrozenOnTheSubscriptionTheMethodAsALabelTheHistoryAndTheInstallments(): void
@@ -458,8 +493,8 @@ final class SubscriptionBackOfficeTest extends WebIntegrationTestCase
     }
 
     /**
-     * @param list<string>                                           $subscriptionAccesses
-     * @param array<string, list<string>>                            $more
+     * @param list<string>                $subscriptionAccesses
+     * @param array<string, list<string>> $more
      */
     private function asRestrictedAdministrator(array $subscriptionAccesses, array $more = []): Admin
     {

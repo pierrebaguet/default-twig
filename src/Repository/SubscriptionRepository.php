@@ -26,7 +26,7 @@ use Propel\Runtime\Propel;
  * Plain SQL on purpose: the Propel models of the subscriptions exist only on a core that
  * carries them, and this class is loaded on any core.
  */
-final readonly class SubscriptionRepository
+readonly class SubscriptionRepository
 {
     private const SORT_COLUMNS = [
         'id' => 's.id',
@@ -162,6 +162,31 @@ final readonly class SubscriptionRepository
         return $rows;
     }
 
+    /**
+     * The plans the list can be filtered on, with the title of their product, in one query.
+     *
+     * @return list<array{id: int, label: string}>
+     */
+    public function findPlanOptions(string $locale): array
+    {
+        $statement = Propel::getConnection()->prepare(
+            'SELECT sp.id, COALESCE(NULLIF(spi.title, \'\'), CONCAT(\'#\', sp.id)) AS plan_title, COALESCE(NULLIF(pi.title, \'\'), p.ref) AS product_title '
+            .'FROM `subscription_plan` sp INNER JOIN `product` p ON p.id = sp.product_id '
+            .'LEFT JOIN `subscription_plan_i18n` spi ON spi.id = sp.id AND spi.locale = :locale_plan '
+            .'LEFT JOIN `product_i18n` pi ON pi.id = p.id AND pi.locale = :locale_product '
+            .'ORDER BY product_title ASC, sp.position ASC, sp.id ASC',
+        );
+        $this->bind($statement, ['locale_plan' => $locale, 'locale_product' => $locale]);
+        $statement->execute();
+
+        $options = [];
+        foreach ($statement->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+            $options[] = ['id' => (int) $row['id'], 'label' => $row['plan_title'].' ('.$row['product_title'].')'];
+        }
+
+        return $options;
+    }
+
     public function countInstallments(int $subscriptionId): int
     {
         $statement = Propel::getConnection()->prepare('SELECT COUNT(*) FROM `subscription_order` WHERE subscription_id = :id');
@@ -293,14 +318,16 @@ final readonly class SubscriptionRepository
             $parameters['customer_id'] = $filters->customerId;
         }
 
-        if ('' !== $filters->customer) {
-            $conditions[] = 'CONCAT_WS(\' \', c.firstname, c.lastname, c.email) LIKE :customer';
-            $parameters['customer'] = '%'.$this->escapeLike($filters->customer).'%';
+        if (null !== $filters->planId) {
+            $conditions[] = 's.subscription_plan_id = :plan_id';
+            $parameters['plan_id'] = $filters->planId;
         }
 
-        if ('' !== $filters->ref) {
-            $conditions[] = 's.ref LIKE :ref';
-            $parameters['ref'] = '%'.$this->escapeLike($filters->ref).'%';
+        if ('' !== $filters->search) {
+            // One group: the OR must not escape the AND of the other filters.
+            $conditions[] = '(s.ref LIKE :q_ref OR c.lastname LIKE :q_lastname OR c.firstname LIKE :q_firstname OR c.email LIKE :q_email)';
+            $like = '%'.$this->escapeLike($filters->search).'%';
+            $parameters += ['q_ref' => $like, 'q_lastname' => $like, 'q_firstname' => $like, 'q_email' => $like];
         }
 
         if (null !== $filters->nextBillingFrom) {

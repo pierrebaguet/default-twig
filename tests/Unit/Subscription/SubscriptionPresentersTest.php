@@ -14,7 +14,9 @@ declare(strict_types=1);
 
 namespace BackOfficeDefaultTwigBundle\Tests\Unit\Subscription;
 
+use BackOfficeDefaultTwigBundle\Repository\SubscriptionRepository;
 use BackOfficeDefaultTwigBundle\Service\I18n\MoneyFormatter;
+use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionFilterCatalog;
 use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionFilterPresenter;
 use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionFilters;
 use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionLabels;
@@ -32,6 +34,14 @@ final class SubscriptionPresentersTest extends TestCase
         $translator->method('trans')->willReturnCallback(static fn (string $id, array $parameters = []): string => strtr($id, $parameters));
 
         return $translator;
+    }
+
+    private function catalog(): SubscriptionFilterCatalog
+    {
+        $subscriptions = $this->createStub(SubscriptionRepository::class);
+        $subscriptions->method('findPlanOptions')->willReturn([['id' => 5, 'label' => 'Gold box (Travis)']]);
+
+        return new SubscriptionFilterCatalog($subscriptions);
     }
 
     private function urls(): UrlGeneratorInterface
@@ -80,8 +90,8 @@ final class SubscriptionPresentersTest extends TestCase
 
     public function testTheShortcutChipsCarryTheCountersAndTheActiveOneIsMarked(): void
     {
-        $presenter = new SubscriptionFilterPresenter($this->urls(), $this->translator(), new SubscriptionLabels($this->translator()));
-        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['payment_failed'], 'ref' => 'SUB']));
+        $presenter = new SubscriptionFilterPresenter($this->urls(), $this->translator(), new SubscriptionLabels($this->translator()), $this->catalog());
+        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['payment_failed'], 'q' => 'SUB']));
 
         $view = $presenter->present($filters, ['active' => 4, 'payment_failed' => 2, 'ended' => 1], 'en_US');
 
@@ -92,19 +102,22 @@ final class SubscriptionPresentersTest extends TestCase
         self::assertTrue($chips['payment_failed']['active']);
         self::assertFalse($chips['all']['active']);
         self::assertStringContainsString('status%5B0%5D=active', $chips['active']['url']);
-        self::assertStringContainsString('ref=SUB', $chips['active']['url'], 'A shortcut keeps the other filters.');
+        self::assertStringContainsString('q=SUB', $chips['active']['url'], 'A shortcut keeps the other filters.');
     }
 
     public function testEachActiveFilterHasAChipThatRemovesIt(): void
     {
-        $presenter = new SubscriptionFilterPresenter($this->urls(), $this->translator(), new SubscriptionLabels($this->translator()));
-        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['active'], 'ref' => 'SUB']));
+        $presenter = new SubscriptionFilterPresenter($this->urls(), $this->translator(), new SubscriptionLabels($this->translator()), $this->catalog());
+        $filters = SubscriptionFilters::fromRequest(new Request(['status' => ['active'], 'q' => 'SUB', 'plan' => '5']));
 
         $chips = array_column($presenter->present($filters, [], 'en_US')['active_chips'], null, 'key');
 
-        self::assertSame(['statuses', 'ref'], array_keys($chips));
+        self::assertSame(['statuses', 'q', 'plan'], array_keys($chips));
         self::assertStringNotContainsString('status', $chips['statuses']['remove_url']);
-        self::assertStringContainsString('ref=SUB', $chips['statuses']['remove_url']);
-        self::assertStringNotContainsString('ref=', $chips['ref']['remove_url']);
+        self::assertStringContainsString('q=SUB', $chips['statuses']['remove_url']);
+        self::assertStringNotContainsString('q=', $chips['q']['remove_url']);
+        self::assertStringNotContainsString('plan=', $chips['plan']['remove_url']);
+        self::assertStringContainsString('plan=5', $chips['q']['remove_url']);
+        self::assertSame('Gold box (Travis)', $chips['plan']['value'], 'The chip names the plan.');
     }
 }
