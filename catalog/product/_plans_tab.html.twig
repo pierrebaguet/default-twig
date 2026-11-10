@@ -1,0 +1,197 @@
+{#
+    Plans tab of the product sheet: the subscription plans of the product, and the form of the plan
+    being created or edited. Only rendered on a core that carries the subscriptions. The plans
+    belong to the catalogue: reading follows the view right on the product, writing the update right.
+#}
+{% set plans = subscription_plans %}
+{% set can_change = plans.can_update %}
+{% set back_url = path('admin.products.update', { product_id: product.id, current_tab: 'subscription-plans' }) %}
+
+<div data-testid="subscription-plans-tab">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <p class="text-muted small mb-0">{{ 'A plan sells this product by subscription: the period an installment pays for, an optional trial, and the price of one installment. A plan that is edited or deleted changes nothing for the subscriptions already taken on it.'|trans }}</p>
+        {% if can_change and not plans.form %}
+            <a href="{{ back_url }}&plan=new" class="btn btn-primary flex-shrink-0" data-testid="subscription-plan-new">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> {{ 'New plan'|trans }}
+            </a>
+        {% endif %}
+    </div>
+
+    {% if plans.plans %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle bo-table-wrap" data-testid="subscription-plans-table">
+                <thead>
+                    <tr>
+                        <th scope="col">{{ 'Plan'|trans }}</th>
+                        <th scope="col">{{ 'Period'|trans }}</th>
+                        <th scope="col">{{ 'Price per installment (excl. tax)'|trans }}</th>
+                        <th scope="col">{{ 'Trial'|trans }}</th>
+                        <th scope="col">{{ 'Installments'|trans }}</th>
+                        <th scope="col">{{ 'Commitment'|trans }}</th>
+                        <th scope="col">{{ 'Can be paused'|trans }}</th>
+                        <th scope="col">{{ 'Online'|trans }}</th>
+                        <th scope="col" class="text-end">{{ 'Actions'|trans }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in plans.plans %}
+                        <tr data-testid="subscription-plan-row" data-plan-id="{{ plan.id }}">
+                            <td class="fw-medium">{{ plan.title }}</td>
+                            <td>{{ plan.period }}</td>
+                            <td dir="ltr">{{ plan.prices|join(' / ') ?: '-' }}</td>
+                            <td>{{ plan.trial_days > 0 ? 'Trial of %count% days'|trans({ '%count%': plan.trial_days }) : '-' }}</td>
+                            <td>{{ plan.installment_count ?? 'until cancelled'|trans }}</td>
+                            <td>{{ plan.commitment_count ?? '-' }}</td>
+                            <td>{{ plan.pausable ? 'Yes'|trans : 'No'|trans }}</td>
+                            <td>
+                                {% if can_change %}
+                                    <form method="post" action="{{ path('admin.products.subscription-plans.visibility') }}" class="d-inline">
+                                        <input type="hidden" name="_token" value="{{ plans.token }}">
+                                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                                        <input type="hidden" name="plan_id" value="{{ plan.id }}">
+                                        <button type="submit" class="btn btn-sm btn-link p-0 {{ plan.visible ? 'text-success' : 'text-secondary' }}"
+                                                title="{{ plan.visible ? 'Take the plan offline'|trans : 'Put the plan online'|trans }}" data-testid="subscription-plan-visibility">
+                                            <i class="bi {{ plan.visible ? 'bi-check-circle-fill' : 'bi-circle' }}" aria-hidden="true"></i>
+                                            <span class="visually-hidden">{{ plan.visible ? 'Online'|trans : 'Offline'|trans }}</span>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    {{ plan.visible ? 'Online'|trans : 'Offline'|trans }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end text-nowrap">
+                                {% if can_change %}
+                                    {% for direction in ['up', 'down'] %}
+                                        <form method="post" action="{{ path('admin.products.subscription-plans.move') }}" class="d-inline">
+                                            <input type="hidden" name="_token" value="{{ plans.token }}">
+                                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                                            <input type="hidden" name="plan_id" value="{{ plan.id }}">
+                                            <input type="hidden" name="direction" value="{{ direction }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="{{ direction == 'up' ? 'Move up'|trans : 'Move down'|trans }}" data-testid="subscription-plan-{{ direction }}">
+                                                <i class="bi bi-arrow-{{ direction }}" aria-hidden="true"></i>
+                                            </button>
+                                        </form>
+                                    {% endfor %}
+                                    <a href="{{ back_url }}&plan={{ plan.id }}" class="btn btn-sm btn-outline-primary" data-testid="subscription-plan-edit">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i> <span class="visually-hidden">{{ 'Edit'|trans }}</span>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#subscription-plan-delete-modal-{{ plan.id }}" data-testid="subscription-plan-delete">
+                                        <i class="bi bi-trash" aria-hidden="true"></i> <span class="visually-hidden">{{ 'Delete'|trans }}</span>
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if can_change %}
+            {% for plan in plans.plans %}
+                {% component 'BoConfirmDialog' with {
+                    id: 'subscription-plan-delete-modal-' ~ plan.id,
+                    title: 'Delete this plan',
+                    message: 'Do you really want to delete this plan? The subscriptions already taken on it go on unchanged.',
+                    formAction: path('admin.products.subscription-plans.delete'),
+                    testid: 'subscription-plan-delete-' ~ plan.id,
+                } %}
+                    {% block body %}
+                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                        <input type="hidden" name="plan_id" value="{{ plan.id }}">
+                        <p class="mb-0">{{ 'Do you really want to delete this plan? The subscriptions already taken on it go on unchanged.'|trans }} <strong>{{ plan.title }}</strong></p>
+                    {% endblock %}
+                {% endcomponent %}
+            {% endfor %}
+        {% endif %}
+    {% else %}
+        <p class="text-muted" data-testid="subscription-plans-empty">{{ 'This product has no subscription plan.'|trans }}</p>
+    {% endif %}
+
+    {% if can_change and plans.form %}
+        {% set form = plans.form %}
+        <form method="post" action="{{ path('admin.products.subscription-plans.save') }}" class="card mt-3" data-testid="subscription-plan-form">
+            <div class="card-body">
+                <h2 class="h5">{{ form.plan_id ? 'Edit the plan'|trans : 'New plan'|trans }}</h2>
+                <input type="hidden" name="_token" value="{{ plans.token }}">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                {% if form.plan_id %}<input type="hidden" name="plan_id" value="{{ form.plan_id }}">{% endif %}
+
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <fieldset>
+                            <legend class="form-label">{{ 'Title'|trans }}</legend>
+                            {% for language in plans.languages %}
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text">{{ language.code }}</span>
+                                    <input type="text" class="form-control" name="title[{{ language.locale }}]" value="{{ form.titles[language.locale]|default('') }}"
+                                           aria-label="{{ 'Title'|trans }} {{ language.title }}" maxlength="255" data-testid="subscription-plan-title-{{ language.locale }}">
+                                </div>
+                            {% endfor %}
+                        </fieldset>
+                    </div>
+                    <div class="col-lg-6">
+                        <fieldset>
+                            <legend class="form-label">{{ 'Price per installment (excl. tax)'|trans }}</legend>
+                            {% set others_filled = plans.currencies|filter(c => not c.is_default and form.prices[c.id] is defined)|length > 0 %}
+                            {% for currency in plans.currencies|filter(c => c.is_default) %}
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text">{{ currency.code }}</span>
+                                    <input type="text" inputmode="decimal" class="form-control" name="price[{{ currency.id }}]" value="{{ form.prices[currency.id]|default('') }}"
+                                           required aria-label="{{ 'Price'|trans }} {{ currency.code }}" data-testid="subscription-plan-price-{{ currency.code }}">
+                                    <span class="input-group-text">{{ 'Required'|trans }}</span>
+                                </div>
+                            {% endfor %}
+                            <details {{ others_filled ? 'open' : '' }} data-testid="subscription-plan-other-currencies">
+                                <summary class="small mb-2">{{ 'Other currencies'|trans }}</summary>
+                                {% for currency in plans.currencies|filter(c => not c.is_default) %}
+                                    <div class="input-group input-group-sm mb-2">
+                                        <span class="input-group-text">{{ currency.code }}</span>
+                                        <input type="text" inputmode="decimal" class="form-control" name="price[{{ currency.id }}]" value="{{ form.prices[currency.id]|default('') }}"
+                                               aria-label="{{ 'Price'|trans }} {{ currency.code }}" data-testid="subscription-plan-price-{{ currency.code }}">
+                                    </div>
+                                {% endfor %}
+                            </details>
+                        </fieldset>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="plan-period-count">{{ 'Every'|trans }}</label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" min="1" class="form-control" id="plan-period-count" name="period_count" value="{{ form.period_count }}" required data-testid="subscription-plan-period-count">
+                            <select class="form-select" name="period_unit" aria-label="{{ 'Period unit'|trans }}" data-testid="subscription-plan-period-unit">
+                                {% for unit, label in { week: 'week(s)'|trans, month: 'month(s)'|trans, quarter: 'quarter(s)'|trans, year: 'year(s)'|trans } %}
+                                    <option value="{{ unit }}" {{ unit == form.period_unit ? 'selected' : '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="plan-trial-days">{{ 'Trial (days)'|trans }}</label>
+                        <input type="number" min="0" class="form-control form-control-sm" id="plan-trial-days" name="trial_days" value="{{ form.trial_days }}" data-testid="subscription-plan-trial-days">
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="plan-installment-count">{{ 'Number of installments'|trans }}</label>
+                        <input type="number" min="1" class="form-control form-control-sm" id="plan-installment-count" name="installment_count" value="{{ form.installment_count }}" placeholder="{{ 'until cancelled'|trans }}" data-testid="subscription-plan-installment-count">
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="plan-commitment-count">{{ 'Commitment (installments)'|trans }}</label>
+                        <input type="number" min="1" class="form-control form-control-sm" id="plan-commitment-count" name="commitment_count" value="{{ form.commitment_count }}" placeholder="{{ 'none'|trans }}" data-testid="subscription-plan-commitment-count">
+                    </div>
+                    <div class="col-12 d-flex flex-wrap gap-4">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="plan-pausable" name="pausable" value="1" {{ form.pausable ? 'checked' : '' }} data-testid="subscription-plan-pausable">
+                            <label class="form-check-label" for="plan-pausable">{{ 'The customer may pause the subscription'|trans }}</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="plan-visible" name="visible" value="1" {{ form.visible ? 'checked' : '' }} data-testid="subscription-plan-visible">
+                            <label class="form-check-label" for="plan-visible">{{ 'Online'|trans }}</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex gap-2 justify-content-end">
+                <a href="{{ back_url }}" class="btn btn-outline-secondary" data-testid="subscription-plan-cancel">{{ 'Cancel'|trans }}</a>
+                <button type="submit" class="btn btn-primary" data-testid="subscription-plan-save"><i class="bi bi-check2" aria-hidden="true"></i> {{ 'Save'|trans }}</button>
+            </div>
+        </form>
+    {% endif %}
+</div>

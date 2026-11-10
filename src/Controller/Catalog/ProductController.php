@@ -35,6 +35,7 @@ use BackOfficeDefaultTwigBundle\Service\Catalog\ProductShippingContext;
 use BackOfficeDefaultTwigBundle\Service\I18n\EditLocaleResolver;
 use BackOfficeDefaultTwigBundle\Service\Listing\ListingThumbnailPresenter;
 use BackOfficeDefaultTwigBundle\Service\SaleUnit\RestrictedAdminGuard;
+use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionPlansContext;
 use BackOfficeDefaultTwigBundle\UiComponents\DataTable\RowAction;
 use Propel\Runtime\ActiveQuery\Criteria;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -100,6 +101,7 @@ final class ProductController
         private readonly TranslatorInterface $translator,
         private readonly ProductRelationsContext $relations,
         private readonly ProductShippingContext $shipping,
+        private readonly SubscriptionPlansContext $subscriptionPlans,
         private readonly ProductDestinationRestrictionContext $destinationRestrictions,
         private readonly CategoryRepository $categories,
         private readonly ProductRepository $productRepository,
@@ -281,6 +283,12 @@ final class ProductController
             $this->shipping->build($product, $uiLocale),
             $this->destinationRestrictions->build($product, $uiLocale),
             $this->bundle->build($product, $uiLocale),
+            $this->subscriptionPlans->build(
+                $product,
+                $uiLocale,
+                ctype_digit((string) $request->query->get('plan', '')) ? (int) $request->query->get('plan') : null,
+                'new' === $request->query->get('plan'),
+            ),
         )));
     }
 

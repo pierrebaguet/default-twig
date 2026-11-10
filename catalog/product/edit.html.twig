@@ -23,7 +23,8 @@
     {# A module tab opens like a native one when current_tab names it; an unknown tab falls back to the general one. #}
     {% set bundle_is = bundle_is|default(false) %}
     {% set current_tab = current_tab == 'bundle' and not bundle_is ? 'general' : current_tab %}
-    {% set current_tab = current_tab in ['general', 'attributes', 'pse', 'bundle', 'related', 'images', 'documents', 'seo', 'modules']|merge(extra_tabs|map(block => block.id)) ? current_tab : 'general' %}
+    {% set plans_tab = subscription_plans.available|default(false) %}
+    {% set current_tab = current_tab in ['general', 'attributes', 'pse', 'bundle', 'related', 'images', 'documents', 'seo', 'modules']|merge(plans_tab ? ['subscription-plans'] : [])|merge(extra_tabs|map(block => block.id)) ? current_tab : 'general' %}
 
     <div class="container-fluid" data-testid="product-edit-page"
          data-controller="bo-unsaved-changes"
@@ -84,6 +85,11 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link {% if current_tab == 'seo' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-seo" type="button" data-testid="product-tab-seo">{{ 'SEO'|trans }}</button>
             </li>
+            {% if plans_tab %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if current_tab == 'subscription-plans' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-subscription-plans" type="button" data-testid="product-tab-subscription-plans">{{ 'Subscription plans'|trans }}</button>
+            </li>
+            {% endif %}
             {% for block in extra_tabs %}
                 <li class="nav-item" role="presentation">
                     <button class="nav-link {% if current_tab == block.id %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#{{ block.id }}"
@@ -444,11 +450,21 @@
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'images' %}show active{% endif %}" id="tab-images" role="tabpanel">
-                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'product', parentId: product.id })) }}
+                {# The sub-controller needs the update right: for an administrator who only views, it answers 403 and Twig turns it into a 500. #}
+                {% if is_granted('UPDATE', 'admin.product') %}
+                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'product', parentId: product.id })) }}
+                {% else %}
+                    <p class="text-muted">{{ 'You are not allowed to change the files of this product.'|trans }}</p>
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'documents' %}show active{% endif %}" id="tab-documents" role="tabpanel">
-                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'product', parentId: product.id })) }}
+                {# The sub-controller needs the update right: for an administrator who only views, it answers 403 and Twig turns it into a 500. #}
+                {% if is_granted('UPDATE', 'admin.product') %}
+                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'product', parentId: product.id })) }}
+                {% else %}
+                    <p class="text-muted">{{ 'You are not allowed to change the files of this product.'|trans }}</p>
+                {% endif %}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'seo' %}show active{% endif %}" id="tab-seo" role="tabpanel">
@@ -491,6 +507,12 @@
                     {% endif %}
                 </div>
             {% endfor %}
+
+            {% if plans_tab %}
+            <div class="tab-pane fade {% if current_tab == 'subscription-plans' %}show active{% endif %}" id="tab-subscription-plans" role="tabpanel">
+                {% include '@BackOfficeDefaultTwig/catalog/product/_plans_tab.html.twig' %}
+            </div>
+            {% endif %}
 
             <div class="tab-pane fade {% if current_tab == 'modules' %}show active{% endif %}" id="tab-modules" role="tabpanel">
                 {{ hook_cards('product.tab-content', { product: product.id, location: 'product-edit', view: 'product' }) }}
