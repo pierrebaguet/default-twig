@@ -358,6 +358,40 @@
             {% endembed %}
         {% endif %}
 
+        {# ── Subscriptions, only on a core that carries them and for an administrator who may see them ── #}
+        {% if can_view_subscriptions|default(false) %}
+            {% embed '@BackOfficeDefaultTwig/customer/_section.html.twig' with {
+                id: 'subscriptions', title: 'Subscriptions'|trans, icon: 'bi-arrow-repeat', testid: 'customer-subscriptions-section',
+                count: subscriptions.total, subscriptions: subscriptions,
+            } only %}
+                {% block section_body %}
+                    {% if subscriptions.rows %}
+                        {{ component('BoDataTable', {
+                            id: 'customer-subscriptions',
+                            columns: [
+                                column_html('ref_html', 'Reference'|trans),
+                                column_html('product_html', 'Product'|trans, visibleFrom: 'md'),
+                                column_text('amount', 'Installment'|trans, 'end', leftToRight: true, visibleFrom: 'sm'),
+                                column_badge('status_code', 'Status'|trans, {}, 'start', 'status', 'status_color'),
+                                column_text('next_billing', 'Next billing'|trans, visibleFrom: 'lg'),
+                                column_actions('_actions', 'Actions'|trans),
+                            ],
+                            rows: subscriptions.rows,
+                            emptyMessage: 'This customer has no subscription.'|trans,
+                            rowIdentifierKey: 'ref',
+                        }) }}
+                        {% if subscriptions.total > subscriptions.rows|length %}
+                            <p class="small text-muted mt-3 mb-0">
+                                <a href="{{ subscriptions.list_url }}" class="link-primary text-decoration-none" data-testid="customer-subscriptions-all-link">{{ 'See the %count% subscriptions of this customer'|trans({ '%count%': subscriptions.total }) }}</a>
+                            </p>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted mb-0" data-testid="customer-subscriptions-empty">{{ 'This customer has no subscription.'|trans }}</p>
+                    {% endif %}
+                {% endblock %}
+            {% endembed %}
+        {% endif %}
+
         {# ── Recent orders, left out for an administrator who may not see them ── #}
         {% if overview.canViewOrders %}
         {% set orders_rows = [] %}

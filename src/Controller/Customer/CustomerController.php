@@ -34,6 +34,7 @@ use BackOfficeDefaultTwigBundle\Service\I18n\CountryFlag;
 use BackOfficeDefaultTwigBundle\Service\I18n\CountryStateProvider;
 use BackOfficeDefaultTwigBundle\Service\I18n\StateChoiceProvider;
 use BackOfficeDefaultTwigBundle\Service\SaleUnit\RestrictedAdminGuard;
+use BackOfficeDefaultTwigBundle\Service\Subscription\CustomerSubscriptionsProvider;
 use BackOfficeDefaultTwigBundle\Service\Tag\TagSwatch;
 use Propel\Runtime\ActiveQuery\Criteria;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -105,6 +106,7 @@ final class CustomerController
         private readonly TagSwatch $swatch,
         private readonly CustomerOverviewProvider $overviewProvider,
         private readonly CustomerPaymentMethodsProvider $paymentMethods,
+        private readonly CustomerSubscriptionsProvider $subscriptions,
         private readonly CustomerGroupAssignment $groupAssignment,
         private readonly RestrictedAdminGuard $restricted,
     ) {
@@ -242,6 +244,8 @@ final class CustomerController
             'overview' => $overview,
             'can_view_payment_methods' => $canViewPaymentMethods,
             'payment_methods' => $canViewPaymentMethods ? $this->paymentMethods->forCustomer($customerId, $request->getLocale(), new \DateTimeImmutable('today')) : [],
+            'can_view_subscriptions' => $this->subscriptions->canView(),
+            'subscriptions' => $this->subscriptions->forCustomer($customerId, $request->getLocale()),
             'recent_orders' => $overview->canViewOrders ? $this->customerOrdersPage($customerId, $ordersPage, $ordersPerPage) : [],
             'orders_total' => $ordersTotal,
             'orders_page' => $ordersPage,
