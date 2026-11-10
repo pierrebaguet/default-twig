@@ -1,0 +1,143 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% block title %}{{ 'Subscriptions'|trans }}{% endblock %}
+{% block body_testid %}subscription-list{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-1">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Subscriptions'|trans }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="container-fluid" data-testid="subscriptions-page">
+        {% embed '@BackOfficeDefaultTwig/_page_header.html.twig' with { title: 'Subscriptions'|trans } %}
+            {% block actions %}{% endblock %}
+        {% endembed %}
+
+        {#- The shortcut chips carry the counters of the states a merchant watches. -#}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3" data-testid="subscription-quick-filters">
+            {% for chip in filters.quick_chips %}
+                <a class="btn btn-sm {{ chip.active ? 'btn-primary' : 'btn-outline-secondary' }}"
+                   href="{{ chip.url }}"
+                   data-testid="subscription-quick-filter-{{ chip.code }}">
+                    {{ chip.label }}
+                    <span class="badge rounded-pill {{ chip.active ? 'text-bg-light' : 'text-bg-secondary' }} ms-1" data-testid="subscription-counter-{{ chip.code }}">{{ chip.count }}</span>
+                </a>
+            {% endfor %}
+        </div>
+
+        <form method="get" action="{{ path('admin.subscription.list') }}" class="bo-order-filters" data-testid="subscription-search-form">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label" for="subscription-filter-customer">{{ 'Customer'|trans }}</label>
+                    <input type="search" id="subscription-filter-customer" name="customer" value="{{ filters.customer_input }}"
+                           class="form-control" placeholder="{{ 'Name or email'|trans }}" data-testid="subscription-filter-customer">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="subscription-filter-ref">{{ 'Reference'|trans }}</label>
+                    <input type="search" id="subscription-filter-ref" name="ref" value="{{ filters.ref_input }}"
+                           class="form-control" data-testid="subscription-filter-ref">
+                </div>
+                <div class="col-md-5 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1" data-testid="subscription-search-submit">
+                        <i class="bi bi-funnel me-1" aria-hidden="true"></i>{{ 'Apply'|trans }}
+                    </button>
+                    <a href="{{ filters.clear_all_url }}" class="btn btn-outline-secondary" data-testid="subscription-reset">{{ 'Reset'|trans }}</a>
+                </div>
+            </div>
+
+            <div class="row g-2 pt-3">
+                <div class="col-lg-6">
+                    <fieldset>
+                        <legend class="form-label">{{ 'Status'|trans }}</legend>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for option in filters.status_options %}
+                                <label class="bo-order-filters__pill" data-checked="{{ option.selected ? 'true' : 'false' }}"
+                                       style="--pill-color: {{ option.color }}; --pill-text: {{ contrast_text_color(option.color) }};">
+                                    <input type="checkbox" class="visually-hidden" name="status[]" value="{{ option.value }}" {{ option.selected ? 'checked' : '' }}>
+                                    <span class="bo-order-filters__pill-dot" aria-hidden="true"></span>
+                                    {{ option.label }}
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                </div>
+                <div class="col-lg-6">
+                    <fieldset>
+                        <legend class="form-label">{{ 'Next billing between'|trans }}</legend>
+                        <div class="row g-2">
+                            <div class="col">
+                                <input type="date" name="next_from" value="{{ filters.next_from_input }}" class="form-control form-control-sm"
+                                       aria-label="{{ 'From'|trans }}" data-testid="subscription-filter-next-from">
+                            </div>
+                            <div class="col">
+                                <input type="date" name="next_to" value="{{ filters.next_to_input }}" class="form-control form-control-sm"
+                                       aria-label="{{ 'To'|trans }}" data-testid="subscription-filter-next-to">
+                            </div>
+                        </div>
+                    </fieldset>
+                </div>
+            </div>
+
+            {% if filters.customer_id %}<input type="hidden" name="customer_id" value="{{ filters.customer_id }}">{% endif %}
+            <input type="hidden" name="order" value="{{ filters.sort_field }}">
+            <input type="hidden" name="direction" value="{{ filters.sort_direction }}">
+        </form>
+
+        {% if filters.active_chips %}
+            <div class="bo-order-filters__active-chips d-flex align-items-center gap-2 mt-3" data-testid="subscription-active-chips">
+                <span class="text-muted small flex-shrink-0">{{ 'Active filters:'|trans }}</span>
+                <div class="d-flex flex-nowrap align-items-center gap-2 overflow-x-auto" role="region" tabindex="0" aria-label="{{ 'Active filters:'|trans }}">
+                    {% for chip in filters.active_chips %}
+                        <a class="bo-order-filters__chip d-inline-flex align-items-center gap-1 text-decoration-none flex-shrink-0"
+                           href="{{ chip.remove_url }}" data-testid="subscription-active-chip-{{ chip.key }}" title="{{ 'Remove this filter'|trans }}">
+                            <span class="bo-order-filters__chip-label">{{ chip.label }}:</span>
+                            <strong class="bo-order-filters__chip-value">{{ chip.value }}</strong>
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </a>
+                    {% endfor %}
+                </div>
+                <a class="bo-order-filters__clear-all small text-decoration-none ms-1 flex-shrink-0" href="{{ filters.clear_all_url }}" data-testid="subscription-clear-all">
+                    <i class="bi bi-eraser me-1" aria-hidden="true"></i>{{ 'Clear all'|trans }}
+                </a>
+            </div>
+        {% endif %}
+
+        <div class="mt-3">
+            {{ component('BoDataTable', {
+                id: 'subscriptions',
+                columns: [
+                    column_html('ref_html', 'Reference'|trans, 'start', 'created_at'),
+                    column_html('customer_html', 'Customer'|trans, visibleFrom: 'md'),
+                    column_html('product_html', 'Product'|trans, visibleFrom: 'lg'),
+                    column_text('plan', 'Period'|trans, visibleFrom: 'xxl'),
+                    column_text('amount', 'Installment'|trans, 'end', leftToRight: true, visibleFrom: 'sm'),
+                    column_badge('status_code', 'Status'|trans, {}, 'start', 'status', 'status_color'),
+                    column_text('next_billing', 'Next billing'|trans, 'start', 'next_billing_at', visibleFrom: 'lg'),
+                    column_actions('_actions', 'Actions'|trans),
+                ],
+                rows: rows,
+                emptyMessage: 'No subscription matches the current filters.'|trans,
+                sortField: filters.sort_field,
+                sortDirection: filters.sort_direction,
+                sortParam: 'order',
+                sortDirectionParam: 'direction',
+                sortKeepParams: query_params,
+                rowIdentifierKey: 'ref',
+            }) }}
+
+            {{ component('BoPagination', {
+                route: 'admin.subscription.list',
+                currentPage: current_page,
+                lastPage: pages,
+                routeParams: query_params,
+                ariaLabel: 'Subscription pagination',
+                testid: 'subscription-pagination',
+            }) }}
+        </div>
+    </div>
+{% endblock %}

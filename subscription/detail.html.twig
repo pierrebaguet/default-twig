@@ -1,0 +1,168 @@
+{% extends '@BackOfficeDefaultTwig/base.html.twig' %}
+
+{% block title %}{{ 'Subscription'|trans }} {{ subscription.ref }}{% endblock %}
+{% block body_testid %}subscription-detail{% endblock %}
+
+{% block breadcrumb %}
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ path('admin.home') }}">{{ 'Home'|trans }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ list_url }}">{{ 'Subscriptions'|trans }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ subscription.ref }}</li>
+        </ol>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    {% set action_labels = {
+        cancel: { title: 'Cancel this subscription', message: 'The subscription stays served until the end of its paid period (or of its commitment), then ends. This cannot be undone.', button: 'Cancel the subscription', variant: 'danger', icon: 'bi-x-circle' },
+        pause: { title: 'Pause this subscription', message: 'No installment is charged while the subscription is paused.', button: 'Pause', variant: 'warning', icon: 'bi-pause-circle' },
+        resume: { title: 'Resume this subscription', message: 'The subscription is billed again at the end of its current period.', button: 'Resume', variant: 'primary', icon: 'bi-play-circle' },
+        reactivate: { title: 'Reactivate this subscription', message: 'The failed installment is charged again now.', button: 'Reactivate', variant: 'primary', icon: 'bi-arrow-repeat' },
+    } %}
+
+    <div class="container-fluid" data-testid="subscription-detail-page">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start mb-3">
+            <div>
+                <h1 class="h3 mb-1">{{ 'Subscription'|trans }} <small class="text-muted">{{ subscription.ref }}</small></h1>
+                <span class="badge" style="background-color: {{ subscription.status_color }}; color: {{ contrast_text_color(subscription.status_color) }};" data-testid="subscription-status-badge">{{ subscription.status }}</span>
+                <span class="small text-muted ms-2"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ subscription.created_at }}</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2" data-testid="subscription-actions">
+                {% if is_granted('UPDATE', 'admin.subscription') %}
+                    {% for action in actions %}
+                        {% set labels = action_labels[action] %}
+                        <button type="button" class="btn btn-outline-{{ labels.variant }}" data-bs-toggle="modal" data-bs-target="#subscription-{{ action }}-modal" data-testid="subscription-{{ action }}-button">
+                            <i class="bi {{ labels.icon }}" aria-hidden="true"></i> {{ labels.button|trans }}
+                        </button>
+                    {% endfor %}
+                {% endif %}
+                <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left" aria-hidden="true"></i> {{ 'Back to list'|trans }}</a>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-lg-6">
+                <div class="card h-100"><div class="card-body">
+                    <h2 class="h6 card-title">{{ 'Customer and product'|trans }}</h2>
+                    <dl class="row mb-0 small">
+                        <dt class="col-sm-4">{{ 'Customer'|trans }}</dt>
+                        <dd class="col-sm-8"><a href="{{ subscription.customer_url }}" data-testid="subscription-customer-link">{{ subscription.customer_name }}</a><br><span class="text-muted">{{ subscription.customer_email }}</span></dd>
+                        <dt class="col-sm-4">{{ 'Product'|trans }}</dt>
+                        <dd class="col-sm-8">
+                            {% if subscription.product_title %}
+                                {% if subscription.product_url %}<a href="{{ subscription.product_url }}">{{ subscription.product_title }}</a>{% else %}{{ subscription.product_title }}{% endif %}
+                            {% else %}
+                                <span class="text-muted fst-italic">{{ 'Product deleted'|trans }}</span>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-sm-4">{{ 'Plan'|trans }}</dt>
+                        <dd class="col-sm-8">{{ subscription.plan_title ?: '-' }}</dd>
+                        <dt class="col-sm-4">{{ 'Payment method'|trans }}</dt>
+                        <dd class="col-sm-8" data-testid="subscription-payment-method">
+                            {% if subscription.payment_method_label %}{{ subscription.payment_method_label }}{% else %}<span class="text-muted">{{ 'None: the next charge is declined'|trans }}</span>{% endif %}
+                            {% if subscription.payment_module %}<span class="text-muted">({{ subscription.payment_module }})</span>{% endif %}
+                        </dd>
+                        <dt class="col-sm-4">{{ 'Initial order'|trans }}</dt>
+                        <dd class="col-sm-8">{% if subscription.initial_order_url %}<a href="{{ subscription.initial_order_url }}" data-testid="subscription-initial-order-link">{{ subscription.initial_order_ref }}</a>{% else %}-{% endif %}</dd>
+                    </dl>
+                </div></div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card h-100"><div class="card-body">
+                    <h2 class="h6 card-title">{{ 'Terms taken with the subscription'|trans }}</h2>
+                    <dl class="row mb-0 small" data-testid="subscription-frozen-values">
+                        <dt class="col-sm-5">{{ 'Period'|trans }}</dt><dd class="col-sm-7">{{ subscription.period }}</dd>
+                        <dt class="col-sm-5">{{ 'Unit price (excl. tax)'|trans }}</dt><dd class="col-sm-7" dir="ltr">{{ subscription.unit_price }}</dd>
+                        <dt class="col-sm-5">{{ 'Quantity'|trans }}</dt><dd class="col-sm-7">{{ subscription.quantity }}</dd>
+                        <dt class="col-sm-5">{{ 'Installment (excl. tax)'|trans }}</dt><dd class="col-sm-7" dir="ltr">{{ subscription.installment_price }}</dd>
+                        <dt class="col-sm-5">{{ 'Installments'|trans }}</dt>
+                        <dd class="col-sm-7">{{ subscription.installments_billed }}{% if subscription.installment_count is not null %} / {{ subscription.installment_count }}{% else %} ({{ 'until cancelled'|trans }}){% endif %}</dd>
+                        <dt class="col-sm-5">{{ 'Commitment'|trans }}</dt>
+                        <dd class="col-sm-7">{% if subscription.commitment_count is not null %}{{ 'Installments'|trans }}: {{ subscription.commitment_count }}{% else %}{{ 'None'|trans }}{% endif %}</dd>
+                        <dt class="col-sm-5">{{ 'Can be paused'|trans }}</dt><dd class="col-sm-7">{{ subscription.pausable ? 'Yes'|trans : 'No'|trans }}</dd>
+                    </dl>
+                </div></div>
+            </div>
+            <div class="col-12">
+                <div class="card"><div class="card-body">
+                    <h2 class="h6 card-title">{{ 'Dates'|trans }}</h2>
+                    <dl class="row mb-0 small" data-testid="subscription-dates">
+                        <dt class="col-sm-3">{{ 'Current period'|trans }}</dt><dd class="col-sm-9">{{ subscription.current_period_start }} → {{ subscription.current_period_end }}</dd>
+                        <dt class="col-sm-3">{{ 'Next billing'|trans }}</dt><dd class="col-sm-9">{{ subscription.next_billing_at }}</dd>
+                        {% if subscription.next_retry_at %}
+                            <dt class="col-sm-3">{{ 'Next retry'|trans }}</dt><dd class="col-sm-9">{{ subscription.next_retry_at }} ({{ 'Failed charges in a row'|trans }}: {{ subscription.failure_count }})</dd>
+                        {% endif %}
+                        {% if subscription.cancel_at %}
+                            <dt class="col-sm-3">{{ 'Ends on'|trans }}</dt><dd class="col-sm-9">{{ subscription.cancel_at }}</dd>
+                        {% endif %}
+                        {% if subscription.paused_at %}
+                            <dt class="col-sm-3">{{ 'Paused on'|trans }}</dt><dd class="col-sm-9">{{ subscription.paused_at }}</dd>
+                        {% endif %}
+                    </dl>
+                </div></div>
+            </div>
+        </div>
+
+        <h2 class="h5">{{ 'Installments'|trans }} <span class="badge rounded-pill text-bg-light border">{{ installments_total }}</span></h2>
+        {{ component('BoDataTable', {
+            id: 'subscription-installments',
+            columns: [
+                column_text('number', 'Installment'|trans),
+                column_text('date', 'Date'|trans, visibleFrom: 'sm'),
+                column_badge('state_code', 'Status'|trans, {}, 'start', 'state', 'state_color'),
+                column_html('order_html', 'Order'|trans),
+                column_text('attempts', 'Charges tried'|trans, 'end', visibleFrom: 'md'),
+                column_text('last_error', 'Last error'|trans, visibleFrom: 'lg', wrap: true),
+                column_actions('_actions', 'Actions'|trans),
+            ],
+            rows: installments,
+            emptyMessage: 'No installment has been placed yet.'|trans,
+            rowIdentifierKey: 'id',
+        }) }}
+        {{ component('BoPagination', {
+            route: 'admin.subscription.view',
+            routeParams: { subscription_id: subscription.id },
+            pageParam: 'installments_page',
+            currentPage: installments_page,
+            lastPage: installments_last_page,
+            ariaLabel: 'Installment pagination',
+            testid: 'subscription-installments-pagination',
+        }) }}
+
+        <h2 class="h5 mt-4">{{ 'History'|trans }}</h2>
+        <div class="table-responsive">
+            <table class="table table-sm bo-table-wrap" data-testid="subscription-history">
+                <thead><tr><th scope="col">{{ 'Date'|trans }}</th><th scope="col">{{ 'Change'|trans }}</th><th scope="col">{{ 'By'|trans }}</th><th scope="col">{{ 'Note'|trans }}</th></tr></thead>
+                <tbody>
+                    {% for entry in history %}
+                        <tr data-testid="subscription-history-row">
+                            <td>{{ entry.date }}</td>
+                            <td><span class="badge" style="background-color: {{ entry.to_status_color }}; color: {{ contrast_text_color(entry.to_status_color) }};">{{ entry.change }}</span></td>
+                            <td>{{ entry.actor }}</td>
+                            <td>{{ entry.note }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="4" class="text-muted">{{ 'No history yet.'|trans }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if is_granted('UPDATE', 'admin.subscription') %}
+        {% for action in actions %}
+            {% set labels = action_labels[action] %}
+            {{ component('BoConfirmDialog', {
+                id: 'subscription-' ~ action ~ '-modal',
+                title: labels.title,
+                message: labels.message,
+                formAction: path('admin.subscription.action', { subscription_id: subscription.id, action: action }),
+                variant: labels.variant,
+                confirmLabel: labels.button,
+                confirmIcon: labels.icon,
+                testid: 'subscription-' ~ action,
+            }) }}
+        {% endfor %}
+    {% endif %}
+{% endblock %}

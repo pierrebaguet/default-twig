@@ -117,6 +117,16 @@
                 </li>
             {% endif %}
 
+            {% if subscriptions_available() and is_granted('VIEW', 'admin.subscription') %}
+                {% set active = nav.is_section(current_path, ['/admin/subscription']) %}
+                <li class="nav-item" data-testid="bo-nav-subscription">
+                    <a href="{{ path('admin.subscription.list') }}" class="nav-link {{ active ? 'active' : '' }}">
+                        <i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i>
+                        {{ 'Subscriptions'|trans }}
+                    </a>
+                </li>
+            {% endif %}
+
             {#- The returns entry only exists once the shop has turned the feature on,
                 exactly as the return screens and the return API do. -#}
             {% if is_granted('VIEW', 'admin.order-return') and thelia_config('order_return_enabled', '0') == '1' %}
