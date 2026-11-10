@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Unit\Subscription;
 
 use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionActions;
+use BackOfficeDefaultTwigBundle\Service\Subscription\SubscriptionSupport;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -22,6 +23,13 @@ use Thelia\Domain\Subscription\Enum\SubscriptionStatus;
 
 final class SubscriptionActionsTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        if (!(new SubscriptionSupport())->isAvailable()) {
+            self::markTestSkipped('The core does not carry the subscriptions.');
+        }
+    }
+
     /**
      * @return iterable<string, array{string, bool, list<string>}>
      */
