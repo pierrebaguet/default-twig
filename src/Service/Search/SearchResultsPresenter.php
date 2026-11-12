@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Search;
 
 use BackOfficeDefaultTwigBundle\Repository\SearchRepository;
+use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
 
 final readonly class SearchResultsPresenter
 {
@@ -22,26 +23,34 @@ final readonly class SearchResultsPresenter
 
     public function __construct(
         private SearchRepository $search,
+        private AdminAccessChecker $access,
     ) {
     }
 
     /**
-     * @return array{term: string, too_short: bool, min_length: int, truncated: array<string, bool>, products: list<array<string, mixed>>, categories: list<array<string, mixed>>, folders: list<array<string, mixed>>, contents: list<array<string, mixed>>, brands: list<array<string, mixed>>, customers: list<array<string, mixed>>, orders: list<array<string, mixed>>}
+     * The groups the administrator may view, each searched only then: a group on a resource they
+     * cannot view costs no query. With $only, that single group is shown, one page at a time.
+     *
+     * @return array{term: string, too_short: bool, min_length: int, only: ?string, page: int, pages: int, page_size: int, groups: array<string, SearchGroupResult>, filtered_lists: array<string, string>}
      */
-    public function buildResults(string $term, string $locale): array
+    public function buildResults(string $term, string $locale, string $fallbackLocale, ?SearchGroup $only = null, int $page = 1): array
     {
+        $groups = array_values(array_filter(
+            null === $only ? SearchGroup::cases() : [$only],
+            fn (SearchGroup $group): bool => $this->access->canView($group->resource()),
+        ));
+        $page = null === $only ? 1 : max(1, $page);
+
         $results = [
             'term' => $term,
             'too_short' => false,
             'min_length' => self::MIN_TERM_LENGTH,
-            'truncated' => [],
-            'products' => [],
-            'categories' => [],
-            'folders' => [],
-            'contents' => [],
-            'brands' => [],
-            'customers' => [],
-            'orders' => [],
+            'only' => null !== $only && [] !== $groups ? $only->value : null,
+            'page' => $page,
+            'pages' => 1,
+            'page_size' => SearchRepository::DISPLAY_LIMIT,
+            'groups' => [],
+            'filtered_lists' => [],
         ];
 
         if ($term === '') {
@@ -54,68 +63,19 @@ final readonly class SearchResultsPresenter
             return $results;
         }
 
-        foreach ($this->search->findProducts($term) as $product) {
-            $product->setLocale($locale);
-            $results['products'][] = [
-                'id' => (int) $product->getId(),
-                'title' => (string) $product->getTitle(),
-                'ref' => (string) $product->getRef(),
-            ];
-        }
+        $searchTerm = new SearchTerm($term);
+        $offset = ($page - 1) * SearchRepository::DISPLAY_LIMIT;
 
-        foreach ($this->search->findCategories($term) as $category) {
-            $category->setLocale($locale);
-            $results['categories'][] = [
-                'id' => (int) $category->getId(),
-                'title' => (string) $category->getTitle(),
-            ];
-        }
+        foreach ($groups as $group) {
+            $result = $this->search->find($group, $searchTerm, $locale, $fallbackLocale, $offset);
+            $results['groups'][$group->value] = $result;
 
-        foreach ($this->search->findFolders($term) as $folder) {
-            $folder->setLocale($locale);
-            $results['folders'][] = [
-                'id' => (int) $folder->getId(),
-                'title' => (string) $folder->getTitle(),
-            ];
-        }
+            if (null !== $route = $group->filteredListRoute()) {
+                $results['filtered_lists'][$group->value] = $route;
+            }
 
-        foreach ($this->search->findContents($term) as $content) {
-            $content->setLocale($locale);
-            $results['contents'][] = [
-                'id' => (int) $content->getId(),
-                'title' => (string) $content->getTitle(),
-            ];
-        }
-
-        foreach ($this->search->findBrands($term) as $brand) {
-            $brand->setLocale($locale);
-            $results['brands'][] = [
-                'id' => (int) $brand->getId(),
-                'title' => (string) $brand->getTitle(),
-            ];
-        }
-
-        foreach ($this->search->findCustomers($term) as $customer) {
-            $results['customers'][] = [
-                'id' => (int) $customer->getId(),
-                'firstname' => (string) $customer->getFirstname(),
-                'lastname' => (string) $customer->getLastname(),
-                'email' => (string) $customer->getEmail(),
-                'ref' => (string) $customer->getRef(),
-            ];
-        }
-
-        foreach ($this->search->findOrders($term) as $order) {
-            $results['orders'][] = [
-                'id' => (int) $order->getId(),
-                'ref' => (string) $order->getRef(),
-            ];
-        }
-
-        foreach (['products', 'categories', 'folders', 'contents', 'brands', 'customers', 'orders'] as $section) {
-            if (\count($results[$section]) > SearchRepository::DISPLAY_LIMIT) {
-                $results[$section] = \array_slice($results[$section], 0, SearchRepository::DISPLAY_LIMIT);
-                $results['truncated'][$section] = true;
+            if (null !== $only) {
+                $results['pages'] = max(1, (int) ceil($result->total / SearchRepository::DISPLAY_LIMIT));
             }
         }
 

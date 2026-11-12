@@ -19,6 +19,8 @@ use BackOfficeDefaultTwigBundle\Repository\OrderRepository;
 use BackOfficeDefaultTwigBundle\Repository\SearchRepository;
 use BackOfficeDefaultTwigBundle\Service\Customer\CustomerFilters;
 use BackOfficeDefaultTwigBundle\Service\Order\OrderAccess;
+use BackOfficeDefaultTwigBundle\Service\Search\SearchGroup;
+use BackOfficeDefaultTwigBundle\Service\Search\SearchTerm;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpFoundation\Request;
 use Thelia\Domain\SaleUnit\Access\AdminSaleUnitScope;
@@ -115,9 +117,10 @@ final class CustomerPhoneSearchTest extends IntegrationTestCase
     {
         $customer = $this->customerWithPhones(cellphone: $this->stored());
 
-        $found = (new SearchRepository(new OrderAccess(new AdminSaleUnitScope())))->findCustomers($this->typed('06 %s %s %s %s'));
+        $found = (new SearchRepository(new OrderAccess(new AdminSaleUnitScope())))
+            ->find(SearchGroup::Customers, new SearchTerm($this->typed('06 %s %s %s %s')), 'en_US', 'en_US');
 
-        self::assertContains((int) $customer->getId(), array_map(static fn (Customer $row): int => (int) $row->getId(), iterator_to_array($found)));
+        self::assertContains((int) $customer->getId(), array_map('intval', array_column($found->rows, 'id')));
     }
 
     private function customerWithPhones(string $cellphone): Customer
