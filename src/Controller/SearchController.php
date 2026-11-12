@@ -15,22 +15,32 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Controller;
 
 use BackOfficeDefaultTwigBundle\Service\Admin\AdminAccessChecker;
+use BackOfficeDefaultTwigBundle\Service\Search\SearchGroup;
 use BackOfficeDefaultTwigBundle\Service\Search\SearchResultsPresenter;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Thelia\Core\Security\AccessManager;
-use Thelia\Model\LangQuery;
+use Thelia\Core\Security\SecurityContext;
+use Thelia\Core\Security\User\UserInterface;
+use Thelia\Model\Lang;
 use Twig\Environment;
 
 final class SearchController
 {
     private const RESOURCE = 'admin.search';
 
+    private const TEMPLATE = '@BackOfficeDefaultTwig/search/index.html.twig';
+
     public function __construct(
         private readonly AdminAccessChecker $access,
         private readonly SearchResultsPresenter $presenter,
         private readonly Environment $twig,
+        private readonly SecurityContext $securityContext,
+        #[Autowire(service: 'limiter.admin_search')]
+        private readonly RateLimiterFactoryInterface $searchLimiter,
     ) {
     }
 
@@ -42,13 +52,29 @@ final class SearchController
         }
 
         $term = trim((string) $request->query->get('search_term', ''));
-        $results = $this->presenter->buildResults($term, $this->defaultLocale());
+        $only = SearchGroup::tryFrom((string) $request->query->get('group', ''));
 
-        return new Response($this->twig->render('@BackOfficeDefaultTwig/search/index.html.twig', $results));
+        if ($term !== '' && !$this->searchLimiter->create($this->limiterKey())->consume()->isAccepted()) {
+            return new Response($this->twig->render(self::TEMPLATE, ['term' => $term, 'rate_limited' => true]), Response::HTTP_TOO_MANY_REQUESTS);
+        }
+
+        // The locale of the back-office interface, set from the administrator's own language;
+        // a title missing there is read in the default language of the shop.
+        $results = $this->presenter->buildResults(
+            $term,
+            $request->getLocale(),
+            Lang::getDefaultLanguage()->getLocale(),
+            $only,
+            $request->query->getInt('page', 1),
+        );
+
+        return new Response($this->twig->render(self::TEMPLATE, $results));
     }
 
-    private function defaultLocale(): string
+    private function limiterKey(): ?string
     {
-        return LangQuery::create()->findOneByByDefault(1)?->getLocale() ?? 'en_US';
+        $admin = $this->securityContext->getAdminUser();
+
+        return $admin instanceof UserInterface ? $admin->getUsername() : null;
     }
 }

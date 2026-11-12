@@ -23,10 +23,15 @@
         </button>
 
         {% if is_granted('VIEW', 'admin.search') %}
-            <form class="d-none d-md-flex flex-grow-1 mx-3" role="search" action="/admin/search" method="get" data-testid="bo-search-form">
+            {# "/" moves the focus to the field from any screen, unless the administrator is already typing somewhere. #}
+            <form class="d-none d-md-flex flex-grow-1 mx-3" role="search" action="{{ path('admin.search') }}" method="get" data-testid="bo-search-form" data-controller="bo-search-shortcut">
                 <div class="input-group">
                     <span class="input-group-text bg-body-secondary border-end-0"><i class="bi bi-search" aria-hidden="true"></i></span>
-                    <input type="search" id="search_term" name="search_term" value="{{ app.request.query.get('search_term', '') }}" class="form-control border-start-0" placeholder="{{ 'Search...'|trans }}">
+                    <input type="search" id="search_term" name="search_term" value="{{ app.request.query.get('search_term', '') }}" class="form-control border-start-0 border-end-0" placeholder="{{ 'Search...'|trans }}" aria-keyshortcuts="/" aria-describedby="search_term_shortcut" data-bo-search-shortcut-target="field">
+                    <span class="input-group-text bg-body border-start-0" id="search_term_shortcut" title="{{ 'Press / to search from any screen'|trans }}">
+                        <kbd class="bg-body-secondary text-body-secondary border small" aria-hidden="true">/</kbd>
+                        <span class="visually-hidden">{{ 'Press / to search from any screen'|trans }}</span>
+                    </span>
                 </div>
             </form>
         {% endif %}
@@ -35,7 +40,7 @@
             {% if is_granted('VIEW', 'admin.search') %}
                 {# Below md the search field is hidden, so the search page keeps its own entry point. #}
                 <li class="nav-item d-md-none">
-                    <a class="nav-link" href="/admin/search" title="{{ 'Search'|trans }}" data-testid="bo-top-nav-search">
+                    <a class="nav-link" href="{{ path('admin.search') }}" title="{{ 'Search'|trans }}" data-testid="bo-top-nav-search">
                         <i class="bi bi-search" aria-hidden="true"></i>
                         <span class="visually-hidden">{{ 'Search'|trans }}</span>
                     </a>

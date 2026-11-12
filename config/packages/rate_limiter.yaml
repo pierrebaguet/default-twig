@@ -45,3 +45,10 @@ framework:
             policy: 'sliding_window'
             limit: 120
             interval: '15 minutes'
+        # The global search of the top bar runs up to twelve queries, most of them scans on a
+        # large catalogue. Per administrator: far above what a person types, low enough that a
+        # script cannot keep the database busy through it.
+        admin_search:
+            policy: 'sliding_window'
+            limit: 120
+            interval: '1 minute'

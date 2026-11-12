@@ -81,6 +81,7 @@ import BootstrapBridgeController from './controllers/bootstrap-bridge_controller
 import BoPostLinkController from './controllers/bo-post-link_controller.js';
 import BoFreeShippingController from './controllers/bo-free-shipping_controller.js';
 import ConfirmModalController from './controllers/confirm-modal_controller.js';
+import BoSearchShortcutController from './controllers/bo-search-shortcut_controller.js';
 
 const app = Application.start();
 
@@ -162,5 +163,6 @@ app.register('bootstrap-bridge', BootstrapBridgeController);
 app.register('bo-post-link', BoPostLinkController);
 app.register('bo-free-shipping', BoFreeShippingController);
 app.register('confirm-modal', ConfirmModalController);
+app.register('bo-search-shortcut', BoSearchShortcutController);
 
 export { app };

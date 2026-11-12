@@ -12,119 +12,141 @@
     </nav>
 {% endblock %}
 
+{% macro row(key, row) %}
+    {% if key == 'products' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <span class="text-break">
+                <a class="text-decoration-none" href="{{ path('admin.products.update', { product_id: row.id }) }}">{{ row.label }}</a>
+                {% if row.combination_ref %}<span class="d-block text-muted small" data-testid="search-product-combination">{{ 'Combination %ref%'|trans({ '%ref%': row.combination_ref }) }}</span>{% endif %}
+            </span>
+            <span class="text-muted small text-nowrap">{{ row.ref }}</span>
+        </li>
+    {% elseif key == 'combinations' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <span class="text-break">
+                <a class="text-decoration-none" href="{{ path('admin.products.update', { product_id: row.product_id, current_tab: 'pse' }) }}">{{ row.label }}</a>
+                {% if row.attributes %}<span class="d-block text-muted small">{{ row.attributes }}</span>{% endif %}
+            </span>
+            <span class="text-muted small text-end">{{ row.ref }}{% if row.ean_code %}<span class="d-block">{{ row.ean_code }}</span>{% endif %}</span>
+        </li>
+    {% elseif key == 'categories' %}
+        <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.categories.update', { category_id: row.id }) }}">{{ row.label }}</a></li>
+    {% elseif key == 'folders' %}
+        <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.folders.update', { folder_id: row.id }) }}">{{ row.label }}</a></li>
+    {% elseif key == 'contents' %}
+        <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.content.update', { content_id: row.id }) }}">{{ row.label }}</a></li>
+    {% elseif key == 'brands' %}
+        <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.brand.update', { brand_id: row.id }) }}">{{ row.label }}</a></li>
+    {% elseif key == 'customers' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <span class="text-break"><a class="text-decoration-none" href="{{ path('admin.customer.update.view', { customer_id: row.id }) }}">{{ row.label }}</a>{% if row.ref %} <span class="text-muted small">({{ row.ref }})</span>{% endif %}</span>
+            {% if row.email %}<span class="text-muted small text-break">{{ row.email }}</span>{% endif %}
+        </li>
+    {% elseif key == 'orders' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <a class="text-decoration-none" href="{{ path('admin.order.update.view', { order_id: row.id }) }}">{{ row.ref }}</a>
+            {% if row.invoice_ref %}<span class="text-muted small">{{ row.invoice_ref }}</span>{% endif %}
+        </li>
+    {% elseif key == 'coupons' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <a class="text-decoration-none text-break" href="{{ path('admin.coupon.update', { couponId: row.id }) }}">{{ row.label }}</a>
+            {% if row.code and row.code != row.label %}<span class="text-muted small text-nowrap">{{ row.code }}</span>{% endif %}
+        </li>
+    {% elseif key == 'sales' %}
+        <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.sale.update', { sale_id: row.id }) }}">{{ row.label }}</a></li>
+    {% elseif key == 'administrators' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <span class="text-break"><a class="text-decoration-none" href="{{ path('admin.configuration.administrators.view', { edit: row.id }) }}">{{ row.label|trim ?: row.login }}</a> <span class="text-muted small">({{ row.login }})</span></span>
+            {% if row.email %}<span class="text-muted small text-break">{{ row.email }}</span>{% endif %}
+        </li>
+    {% elseif key == 'modules' %}
+        <li class="list-group-item d-flex justify-content-between gap-3">
+            <a class="text-decoration-none text-break" href="{{ path('admin.module.update', { module_id: row.id }) }}">{{ row.label }}</a>
+            <span class="text-muted small text-nowrap">{{ row.code }}</span>
+        </li>
+    {% endif %}
+{% endmacro %}
+
 {% block content %}
     {{ safe_hook('search.top', { location: 'search_top' }) }}
+
+    {% set titles = {
+        products: 'Products', combinations: 'Combinations', categories: 'Categories', folders: 'Folders',
+        contents: 'Contents', brands: 'Brands', customers: 'Customers', orders: 'Orders',
+        coupons: 'Coupons', sales: 'Sales', administrators: 'Administrators', modules: 'Modules',
+    } %}
+    {% set empty_messages = {
+        products: 'No product match.', combinations: 'No combination match.', categories: 'No category match.',
+        folders: 'No folder match.', contents: 'No content match.', brands: 'No brand match.',
+        customers: 'No customer match.', orders: 'No order match.', coupons: 'No coupon match.',
+        sales: 'No sale match.', administrators: 'No administrator match.', modules: 'No module match.',
+    } %}
 
     <div class="container-fluid" data-testid="search-page">
         <h1 class="h3 mb-3">{{ 'Search results'|trans }} <small class="text-muted">"{{ term }}"</small></h1>
 
-        {% if term is empty %}
+        {% if rate_limited|default(false) %}
+            <div class="alert alert-warning" role="alert" data-testid="search-rate-limited">{{ 'Too many searches in a row. Please try again in a minute.'|trans }}</div>
+        {% elseif term is empty %}
             <p class="text-muted">{{ 'Type a search term in the top bar.'|trans }}</p>
         {% elseif too_short %}
             <div class="alert alert-info" data-testid="search-too-short">{{ 'Please enter at least %count% characters to search.'|trans({ '%count%': min_length }) }}</div>
         {% else %}
+            {% if only %}
+                <p class="mb-3"><a href="{{ path('admin.search', { search_term: term }) }}" data-testid="search-back-to-all">&lsaquo; {{ 'Back to all the results'|trans }}</a></p>
+            {% endif %}
+
+            {% set found = groups|filter(result => result.total > 0) %}
+            {% if found is empty %}
+                <p class="text-muted" data-testid="search-no-result">{{ 'No result matches this term.'|trans }}</p>
+            {% endif %}
+
             <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Products'|trans }} <span class="badge bg-secondary ms-1">{{ products|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for product in products %}
-                                <li class="list-group-item d-flex justify-content-between"><a class="text-decoration-none" href="{{ path('admin.products.update', { product_id: product.id }) }}">{{ product.title }}</a><span class="text-muted small">{{ product.ref }}</span></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No product match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.products is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
+                {% for key, result in found %}
+                    <div class="{{ only ? 'col-12' : 'col-md-6' }}">
+                        <div class="card" data-testid="search-group-{{ key }}">
+                            <div class="card-header d-flex align-items-center gap-2">
+                                <span>{{ titles[key]|trans }}</span>
+                                <span class="badge bg-secondary" data-testid="search-group-{{ key }}-total">
+                                    {%- if result.isTruncated and not only -%}
+                                        {{ '%shown% of %total%'|trans({ '%shown%': result.rows|length, '%total%': result.total }) }}
+                                    {%- else -%}
+                                        {{ result.total }}
+                                    {%- endif -%}
+                                </span>
+                            </div>
+                            <ul class="list-group list-group-flush">
+                                {% for row in result.rows %}
+                                    {{ _self.row(key, row) }}
+                                {% else %}
+                                    {# Only past the last page of a group shown on its own. #}
+                                    <li class="list-group-item text-muted small">{{ empty_messages[key]|trans }}</li>
+                                {% endfor %}
+                                {% if result.isTruncated and not only %}
+                                    <li class="list-group-item small">
+                                        {% if filtered_lists[key] is defined %}
+                                            <a href="{{ path(filtered_lists[key], { q: term }) }}" data-testid="search-group-{{ key }}-list">{{ 'Open the list filtered on this term'|trans }}</a>
+                                        {% else %}
+                                            <a href="{{ path('admin.search', { search_term: term, group: key }) }}" data-testid="search-group-{{ key }}-all">{{ 'See the %count% results'|trans({ '%count%': result.total }) }}</a>
+                                        {% endif %}
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </div>
                     </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Categories'|trans }} <span class="badge bg-secondary ms-1">{{ categories|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for category in categories %}
-                                <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.categories.update', { category_id: category.id }) }}">{{ category.title }}</a></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No category match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.categories is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Folders'|trans }} <span class="badge bg-secondary ms-1">{{ folders|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for folder in folders %}
-                                <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.folders.update', { folder_id: folder.id }) }}">{{ folder.title }}</a></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No folder match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.folders is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Contents'|trans }} <span class="badge bg-secondary ms-1">{{ contents|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for content in contents %}
-                                <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.content.update', { content_id: content.id }) }}">{{ content.title }}</a></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No content match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.contents is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Brands'|trans }} <span class="badge bg-secondary ms-1">{{ brands|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for brand in brands %}
-                                <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.brand.update', { brand_id: brand.id }) }}">{{ brand.title }}</a></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No brand match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.brands is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Customers'|trans }} <span class="badge bg-secondary ms-1">{{ customers|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for customer in customers %}
-                                <li class="list-group-item d-flex justify-content-between">
-                                    <span><a class="text-decoration-none" href="{{ path('admin.customer.update.view', { customer_id: customer.id }) }}">{{ customer.firstname }} {{ customer.lastname }}</a>{% if customer.ref %} <span class="text-muted small">({{ customer.ref }})</span>{% endif %}</span>
-                                    {% if customer.email %}<a href="mailto:{{ customer.email }}" class="text-muted small text-decoration-none">{{ customer.email }}</a>{% endif %}
-                                </li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No customer match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.customers is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">{{ 'Orders'|trans }} <span class="badge bg-secondary ms-1">{{ orders|length }}</span></div>
-                        <ul class="list-group list-group-flush">
-                            {% for order in orders %}
-                                <li class="list-group-item"><a class="text-decoration-none" href="{{ path('admin.order.update.view', { order_id: order.id }) }}">{{ order.ref }}</a></li>
-                            {% else %}
-                                <li class="list-group-item text-muted small">{{ 'No order match.'|trans }}</li>
-                            {% endfor %}
-                            {% if truncated.orders is defined %}<li class="list-group-item text-info small">{{ 'More results are available. Please refine your search.'|trans }}</li>{% endif %}
-                        </ul>
-                    </div>
-                </div>
+                {% endfor %}
             </div>
+
+            {% if only %}
+                {{ component('BoPagination', {
+                    route: 'admin.search',
+                    currentPage: page,
+                    lastPage: pages,
+                    routeParams: { search_term: term, group: only },
+                    ariaLabel: 'Search results pagination',
+                    testid: 'search-pagination',
+                }) }}
+            {% endif %}
         {% endif %}
     </div>
 

@@ -24,6 +24,12 @@
                  data-testid="administrator-email-notice">
                 {{ 'Please set an email address for your account to continue.'|trans }}
             </div>
+        {% elseif edit_forms[app.request.query.getInt('edit')] is defined %}
+            {# Opened from the global search: the administrator found is shown in their edit dialog. #}
+            <div hidden
+                 data-controller="bo-auto-open-modal"
+                 data-bo-auto-open-modal-target-value="#administrator-edit-modal-{{ app.request.query.getInt('edit') }}"
+                 data-testid="administrator-edit-requested"></div>
         {% endif %}
 
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
