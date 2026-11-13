@@ -16,21 +16,24 @@ namespace BackOfficeDefaultTwigBundle\Service\Subscription;
 
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Thelia\Domain\Subscription\Enum\ActorType;
+use Thelia\Domain\Subscription\Enum\SubscriptionAction;
 use Thelia\Domain\Subscription\Enum\SubscriptionStatus;
 use Thelia\Domain\Subscription\Exception\SubscriptionException;
-use Thelia\Domain\Subscription\SubscriptionManager;
+use Thelia\Domain\Subscription\SubscriptionLifecycle;
 use Thelia\Model\Subscription;
 
 /**
- * What an administrator does to a subscription. Every gesture goes through the manager of
+ * What an administrator does to a subscription. Every gesture goes through the lifecycle of
  * the core, which is the only one to decide whether the state allows it and to write the
  * history; this class only says which gestures to offer and relays the refusal as a message.
  *
- * The manager is an optional argument: on a core without the subscriptions it does not
+ * The lifecycle is an optional argument: on a core without the subscriptions it does not
  * exist, and nothing here is called.
  */
 final readonly class SubscriptionActions
 {
+    // The values of SubscriptionAction, written out: a constant expression reading a class of the
+    // core would be evaluated on a core without the subscriptions.
     public const CANCEL = 'cancel';
     public const PAUSE = 'pause';
     public const RESUME = 'resume';
@@ -40,13 +43,13 @@ final readonly class SubscriptionActions
 
     public function __construct(
         private TranslatorInterface $translator,
-        private ?SubscriptionManager $manager = null,
+        private ?SubscriptionLifecycle $lifecycle = null,
     ) {
     }
 
     /**
-     * The gestures the state allows, in the order they are offered. A subscription that
-     * cannot be paused by its plan is not offered the pause.
+     * The gestures the state allows, in the order they are offered: the rule of the core
+     * (SubscriptionAction), less the change of payment method, which is the customer's.
      *
      * @return list<string>
      */
@@ -60,20 +63,10 @@ final readonly class SubscriptionActions
 
         $allowed = [];
 
-        if ($pausable && $current->canBecome(SubscriptionStatus::Paused)) {
-            $allowed[] = self::PAUSE;
-        }
-
-        if (SubscriptionStatus::Paused === $current) {
-            $allowed[] = self::RESUME;
-        }
-
-        if (\in_array($current, [SubscriptionStatus::Suspended, SubscriptionStatus::PaymentFailed], true)) {
-            $allowed[] = self::REACTIVATE;
-        }
-
-        if ($current->canBecome(SubscriptionStatus::Cancelled)) {
-            $allowed[] = self::CANCEL;
+        foreach (SubscriptionAction::allowedIn($current, $pausable) as $action) {
+            if (\in_array($action->value, self::ALL, true)) {
+                $allowed[] = $action->value;
+            }
         }
 
         return $allowed;
@@ -84,16 +77,16 @@ final readonly class SubscriptionActions
      */
     public function perform(string $action, Subscription $subscription, ?int $administratorId): array
     {
-        if (null === $this->manager || !\in_array($action, self::ALL, true)) {
+        if (null === $this->lifecycle || !\in_array($action, self::ALL, true)) {
             throw new \LogicException('The subscriptions are not available.');
         }
 
         try {
             match ($action) {
-                self::CANCEL => $this->manager->cancel($subscription, ActorType::Admin, $administratorId),
-                self::PAUSE => $this->manager->pause($subscription, ActorType::Admin, $administratorId),
-                self::RESUME => $this->manager->resume($subscription, ActorType::Admin, $administratorId),
-                self::REACTIVATE => $this->manager->reactivate($subscription, ActorType::Admin, $administratorId),
+                self::CANCEL => $this->lifecycle->cancel($subscription, ActorType::Admin, $administratorId),
+                self::PAUSE => $this->lifecycle->pause($subscription, ActorType::Admin, $administratorId),
+                self::RESUME => $this->lifecycle->resume($subscription, ActorType::Admin, $administratorId),
+                self::REACTIVATE => $this->lifecycle->reactivate($subscription, ActorType::Admin, $administratorId),
             };
         } catch (SubscriptionException $refusal) {
             // SubscriptionActionRefusedException and SubscriptionTransitionRefusedException: the
