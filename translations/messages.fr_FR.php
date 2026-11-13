@@ -3938,6 +3938,5 @@ return [
     'The failed installment is charged again now.' => 'L\'échéance en échec est prélevée de nouveau maintenant.',
     'Reactivate' => 'Réactiver',
     'Delete this plan' => 'Supprimer ce plan',
-    'You are not allowed to change the files of this product.' => 'Vous n\'êtes pas autorisé à modifier les fichiers de ce produit.',
     'Other currencies' => 'Autres devises',
 ];

@@ -450,21 +450,11 @@
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'images' %}show active{% endif %}" id="tab-images" role="tabpanel">
-                {# The sub-controller needs the update right: for an administrator who only views, it answers 403 and Twig turns it into a 500. #}
-                {% if is_granted('UPDATE', 'admin.product') %}
-                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'product', parentId: product.id })) }}
-                {% else %}
-                    <p class="text-muted">{{ 'You are not allowed to change the files of this product.'|trans }}</p>
-                {% endif %}
+                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::imageForm', { parentType: 'product', parentId: product.id })) }}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'documents' %}show active{% endif %}" id="tab-documents" role="tabpanel">
-                {# The sub-controller needs the update right: for an administrator who only views, it answers 403 and Twig turns it into a 500. #}
-                {% if is_granted('UPDATE', 'admin.product') %}
-                    {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'product', parentId: product.id })) }}
-                {% else %}
-                    <p class="text-muted">{{ 'You are not allowed to change the files of this product.'|trans }}</p>
-                {% endif %}
+                {{ render(controller('BackOfficeDefaultTwigBundle\\Controller\\File\\FileController::documentForm', { parentType: 'product', parentId: product.id })) }}
             </div>
 
             <div class="tab-pane fade {% if current_tab == 'seo' %}show active{% endif %}" id="tab-seo" role="tabpanel">
