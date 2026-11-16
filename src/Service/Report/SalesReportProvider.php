@@ -78,6 +78,8 @@ final readonly class SalesReportProvider
         self::TAB_CUSTOMER => 'thelia.export.sales_by_customer',
     ];
 
+    private const PAID_EXPORT_SUFFIX = '_paid';
+
     private const CUSTOMER_SORTS = ['name', 'orders', 'total', 'average', 'last_order'];
 
     public function __construct(
@@ -178,7 +180,7 @@ final readonly class SalesReportProvider
             direction: $descending ? 'desc' : 'asc',
             sortUrls: self::TAB_CUSTOMER === $tab ? $this->sortUrls($range, $allOrders, $sort, $descending) : [],
             currencyCode: (string) \Thelia\Model\Currency::getDefaultCurrency()->getCode(),
-            export: $allOrders ? null : $this->export($tab, $range, $locale),
+            export: $this->export($tab, $range, $allOrders, $locale),
             computedAt: $figures['computedAt'],
             refreshUrl: $this->urls->generate(self::ROUTES[$tab], $this->periodParameters($range) + $this->keptParameters($allOrders, $tab, $sort, $descending) + ($page > 1 ? ['page' => (string) $page] : []) + ['refresh' => '1']),
         );
@@ -259,7 +261,7 @@ final readonly class SalesReportProvider
             $tabs[] = [
                 'key' => $key,
                 'label' => $label,
-                'url' => $this->urls->generate(self::ROUTES[$key], $this->periodParameters($range) + ($allOrders ? ['scope' => self::SCOPE_ALL] : [])),
+                'url' => $this->urls->generate(self::ROUTES[$key], $this->periodParameters($range) + $this->scopeParameters($allOrders)),
                 'active' => $key === $current,
             ];
         }
@@ -273,11 +275,8 @@ final readonly class SalesReportProvider
     private function scopeOptions(string $tab, DateRange $range, bool $allOrders, string $sort, bool $descending): array
     {
         $options = [];
-        foreach ([self::SCOPE_PAID => 'Paid orders', self::SCOPE_ALL => 'All orders'] as $value => $label) {
-            $parameters = $this->periodParameters($range) + $this->sortParameters($tab, $sort, $descending);
-            if (self::SCOPE_ALL === $value) {
-                $parameters['scope'] = self::SCOPE_ALL;
-            }
+        foreach ([self::SCOPE_ALL => 'All orders', self::SCOPE_PAID => 'Paid orders'] as $value => $label) {
+            $parameters = $this->periodParameters($range) + $this->sortParameters($tab, $sort, $descending) + $this->scopeParameters(self::SCOPE_ALL === $value);
 
             $options[] = [
                 'value' => $value,
@@ -301,7 +300,7 @@ final readonly class SalesReportProvider
             $nextDescending = $column === $sort ? !$descending : 'name' !== $column;
             $urls[$column] = $this->urls->generate(
                 self::ROUTE_CUSTOMER,
-                $this->periodParameters($range) + ($allOrders ? ['scope' => self::SCOPE_ALL] : []) + ['sort' => $column, 'dir' => $nextDescending ? 'desc' : 'asc'],
+                $this->periodParameters($range) + $this->scopeParameters($allOrders) + ['sort' => $column, 'dir' => $nextDescending ? 'desc' : 'asc'],
             );
         }
 
@@ -317,7 +316,7 @@ final readonly class SalesReportProvider
     {
         return [
             'route' => self::ROUTES[$tab],
-            'params' => $this->periodParameters($range) + ($allOrders ? ['scope' => self::SCOPE_ALL] : []) + $this->sortParameters($tab, $sort, $descending),
+            'params' => $this->periodParameters($range) + $this->scopeParameters($allOrders) + $this->sortParameters($tab, $sort, $descending),
             'current' => $result->page,
             'last' => $result->pageCount(),
             'total' => $result->totalRows,
@@ -331,7 +330,17 @@ final readonly class SalesReportProvider
      */
     private function keptParameters(bool $allOrders, string $tab, string $sort, bool $descending): array
     {
-        return ($allOrders ? ['scope' => self::SCOPE_ALL] : []) + $this->sortParameters($tab, $sort, $descending);
+        return $this->scopeParameters($allOrders) + $this->sortParameters($tab, $sort, $descending);
+    }
+
+    /**
+     * Every order is counted unless the address asks for the paid ones only, as the dashboard counts them.
+     *
+     * @return array<string, string>
+     */
+    private function scopeParameters(bool $allOrders): array
+    {
+        return $allOrders ? [] : ['scope' => self::SCOPE_PAID];
     }
 
     /**
@@ -355,18 +364,18 @@ final readonly class SalesReportProvider
     }
 
     /**
-     * The export of the tab, over the exact days on screen. It counts the paid orders: it is not
-     * offered beside the figures of every order.
+     * The export of the tab, over the exact days and the orders on screen: the paid orders have
+     * an export of their own, so that the scheduled reports can count them too.
      *
      * @return array<string, mixed>|null
      */
-    private function export(string $tab, DateRange $range, string $locale): ?array
+    private function export(string $tab, DateRange $range, bool $allOrders, string $locale): ?array
     {
         if (!$this->canView(AdminResources::EXPORT)) {
             return null;
         }
 
-        $exportId = $this->dataTransfers->findExportIdByRef(self::EXPORT_REFS[$tab]);
+        $exportId = $this->dataTransfers->findExportIdByRef(self::EXPORT_REFS[$tab].($allOrders ? '' : self::PAID_EXPORT_SUFFIX));
         if (null === $exportId) {
             return null;
         }

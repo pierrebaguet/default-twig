@@ -20,6 +20,7 @@ use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Model\Admin;
 use Thelia\Model\ConfigQuery;
 use Thelia\Model\Customer;
+use Thelia\Model\ExportQuery;
 use Thelia\Model\OrderStatus;
 use Thelia\Test\FixtureFactory;
 use Thelia\Test\WebIntegrationTestCase;
@@ -83,7 +84,7 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         foreach (['lines', 'discounts', 'postage', 'total'] as $line) {
             self::assertCount(1, $crawler->filter('[data-testid="report-reconciliation-'.$line.'"]'), $line);
         }
-        self::assertStringContainsString('Only the paid orders', $crawler->filter('[data-testid="report-scope-label"]')->text());
+        self::assertStringContainsString('Every order created', $crawler->filter('[data-testid="report-scope-label"]')->text(), 'Every order is counted by default, as the dashboard counts them.');
         self::assertCount(1, $crawler->filter('[data-testid="report-sales-revenue"]'));
         self::assertCount(1, $crawler->filter('[data-testid="report-sales-revenue-variation"]'));
 
@@ -116,23 +117,25 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         self::assertStringContainsString('btn-primary', (string) $this->client->getCrawler()->filter('[data-testid="report-period-30days"]')->attr('class'));
     }
 
-    public function testTheScopeSwitchCountsEveryOrderAndSaysSo(): void
+    public function testTheScopeSwitchKeepsThePaidOrdersAndSaysSo(): void
     {
         $customer = $this->customer('Beta');
         $this->loginAs($this->factory->admin());
         $this->assertPageRenders(self::CATEGORY_URL);
-        $paidBefore = $this->orderCount();
-
-        $this->assertPageRenders(self::CATEGORY_URL.'?scope=all');
         $allBefore = $this->orderCount();
-        self::assertStringContainsString('Every order created', $this->client->getCrawler()->filter('[data-testid="report-scope-label"]')->text());
+        self::assertStringContainsString('btn-primary', (string) $this->client->getCrawler()->filter('[data-testid="report-scope-all"]')->attr('class'));
+
+        $this->assertPageRenders(self::CATEGORY_URL.'?scope=paid');
+        $paidBefore = $this->orderCount();
+        self::assertStringContainsString('Only the paid orders', $this->client->getCrawler()->filter('[data-testid="report-scope-label"]')->text());
+        self::assertStringContainsString('btn-primary', (string) $this->client->getCrawler()->filter('[data-testid="report-scope-paid"]')->attr('class'));
 
         $this->factory->order($customer, ['statusCode' => OrderStatus::CODE_NOT_PAID]);
         $this->assertPageRenders(self::CATEGORY_URL);
-        self::assertSame($paidBefore, $this->orderCount(), 'An order that is not paid is not counted by default.');
-        $this->assertPageRenders(self::CATEGORY_URL.'?scope=all');
-        self::assertSame($allBefore + 1, $this->orderCount(), 'It is counted when every order is.');
-        self::assertStringContainsString('btn-primary', (string) $this->client->getCrawler()->filter('[data-testid="report-scope-all"]')->attr('class'));
+        self::assertSame($allBefore + 1, $this->orderCount(), 'An order that is not paid is counted by default.');
+        $this->assertPageRenders(self::CATEGORY_URL.'?scope=paid');
+        self::assertSame($paidBefore, $this->orderCount(), 'It is not counted among the paid orders.');
+        self::assertStringContainsString('scope=paid', (string) $this->client->getCrawler()->filter('[data-testid="report-tab-product"]')->attr('href'), 'The other tabs keep the paid orders.');
     }
 
     public function testWithoutTheCustomerPermissionTheCustomerTabIsHiddenAndItsRouteRefused(): void
@@ -195,10 +198,10 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
 
         $this->loginAs($this->factory->restrictedAdmin([AdminResources::ORDER => [AccessManager::VIEW], AdminResources::EXPORT => [AccessManager::VIEW]]));
         $this->assertPageRenders(self::CATEGORY_URL);
-        self::assertCount(1, $this->client->getCrawler()->filter('[data-testid="report-export-button"]'));
+        self::assertSame('thelia.export.sales_by_category', $this->exportRef(), 'Every order on screen, every order in the file.');
 
-        $this->assertPageRenders(self::CATEGORY_URL.'?scope=all');
-        self::assertCount(0, $this->client->getCrawler()->filter('[data-testid="report-export-button"]'), 'The export counts the paid orders: it is not offered beside every order.');
+        $this->assertPageRenders(self::CATEGORY_URL.'?scope=paid');
+        self::assertSame('thelia.export.sales_by_category_paid', $this->exportRef(), 'The paid orders on screen, the paid orders in the file.');
     }
 
     public function testTheFiguresAreKeptUntilAnOrderChangesOrTheyAreComputedAgain(): void
@@ -246,6 +249,13 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
     {
         $order = $this->factory->order($customer, ['statusCode' => OrderStatus::CODE_PAID, 'postage' => $postage]);
         $this->factory->orderProduct($order, ['price' => $price, 'quantity' => $quantity]);
+    }
+
+    private function exportRef(): ?string
+    {
+        $action = (string) $this->client->getCrawler()->filter('[data-testid="report-export-form"]')->attr('action');
+
+        return ExportQuery::create()->findPk((int) basename((string) parse_url($action, \PHP_URL_PATH)))?->getRef();
     }
 
     private function loginAs(Admin $admin): void

@@ -99,7 +99,7 @@ final class ReportsController
         $report = $this->salesReports->compute(
             $tab,
             DateRange::fromRequest($request),
-            'all' === $request->query->get('scope'),
+            'paid' !== $request->query->get('scope'),
             SalesReportProvider::customerSort($request->query->getString('sort') ?: null),
             $request->query->getString('dir') ?: null,
             max(1, $request->query->getInt('page', 1)),
