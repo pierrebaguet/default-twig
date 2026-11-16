@@ -51,6 +51,7 @@ final class SearchTermTest extends TestCase
         yield 'UPC-A with dashes' => ['0360-0029-1452', '036000291452'];
         yield 'EAN-8' => ['96385074', '96385074'];
         yield 'GTIN-14' => ['10614141000415', '10614141000415'];
+        yield 'a wrong check digit, as a code stored before the codes were checked' => ['4006381333932', '4006381333932'];
         yield 'seven digits' => ['1234567', null];
         yield 'nine digits' => ['123456789', null];
         yield 'a reference' => ['PROD-0001', null];

@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Service\Search;
 
 use Thelia\Domain\Catalog\Product\Identifier\Gtin;
+use Thelia\Domain\Catalog\Product\Identifier\GtinViolation;
 
 /**
  * What the administrator typed in the search box, and the patterns it is looked up with.
@@ -37,7 +38,10 @@ final readonly class SearchTerm
     /** Matches a value starting with the term. */
     public string $prefix;
 
-    /** The term read as a GTIN once its spaces and dashes are dropped, or null when it is not one. */
+    /**
+     * The term read as a GTIN once its spaces and dashes are dropped, or null when it is not one.
+     * A wrong check digit is kept: a code stored before the codes were checked can carry one.
+     */
     public ?string $gtin;
 
     public function __construct(string $typed)
@@ -48,6 +52,6 @@ final readonly class SearchTerm
         $this->prefix = $escaped.'%';
 
         $digits = Gtin::normalize($this->raw);
-        $this->gtin = preg_match('/^\d+$/', $digits) === 1 && \in_array(\strlen($digits), Gtin::LENGTHS, true) ? $digits : null;
+        $this->gtin = \in_array(Gtin::violationOf($digits), [null, GtinViolation::CheckDigit], true) ? $digits : null;
     }
 }

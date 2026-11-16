@@ -24,8 +24,6 @@ use Propel\Runtime\ActiveQuery\Criteria;
 use Propel\Runtime\Propel;
 use Thelia\Domain\Catalog\Quantity\QuantityFormatter;
 use Thelia\Domain\Catalog\Quantity\UnitCode;
-use Thelia\Model\AttributeAvQuery;
-use Thelia\Model\AttributeCombinationQuery;
 use Thelia\Model\ProductI18nQuery;
 use Thelia\Model\ProductQuery;
 use Thelia\Model\ProductSaleElementsQuery;
@@ -64,11 +62,12 @@ final readonly class SearchRepository
             return [];
         }
 
-        $pattern = '%'.addcslashes($term, '%_\\').'%';
+        $pattern = (new SearchTerm($term))->contains;
+        $escape = ' ESCAPE \''.SearchTerm::LIKE_ESCAPE.'\'';
 
         $titleIds = ProductI18nQuery::create()
             ->filterByLocale($locale)
-            ->filterByTitle($pattern, Criteria::LIKE)
+            ->where('ProductI18n.Title LIKE ?'.$escape, $pattern)
             ->select(['Id'])
             ->find()
             ->toArray();
@@ -77,7 +76,7 @@ final readonly class SearchRepository
             ->filterByVisible(1)
             ->filterByIsBundle(0)
             ->condition('byTitle', 'product.id IN ?', $titleIds ?: [0])
-            ->condition('byRef', 'product.ref LIKE ?', $pattern)
+            ->condition('byRef', 'product.ref LIKE ?'.$escape, $pattern)
             ->where(['byTitle', 'byRef'], Criteria::LOGICAL_OR)
             ->limit($limit)
             ->find();
@@ -100,7 +99,7 @@ final readonly class SearchRepository
             ->find()
             ->getArrayCopy();
 
-        $labels = $this->combinationLabels(array_map(static fn ($pse): int => (int) $pse->getId(), $elements), $locale);
+        $labels = $this->attributeLabels(array_map(static fn ($pse): int => (int) $pse->getId(), $elements), $locale, $locale);
 
         $rows = [];
         $perProduct = [];
@@ -122,42 +121,6 @@ final readonly class SearchRepository
         }
 
         return $rows;
-    }
-
-    /**
-     * @param list<int> $productSaleElementsIds
-     *
-     * @return array<int, string>
-     */
-    private function combinationLabels(array $productSaleElementsIds, string $locale): array
-    {
-        if ([] === $productSaleElementsIds) {
-            return [];
-        }
-
-        $combinations = AttributeCombinationQuery::create()
-            ->filterByProductSaleElementsId($productSaleElementsIds, Criteria::IN)
-            ->find();
-
-        $valueIds = [];
-        foreach ($combinations as $combination) {
-            $valueIds[] = (int) $combination->getAttributeAvId();
-        }
-
-        $titles = [];
-        if ([] !== $valueIds) {
-            foreach (AttributeAvQuery::create()->filterById($valueIds, Criteria::IN)->find() as $value) {
-                $value->setLocale($locale);
-                $titles[(int) $value->getId()] = (string) $value->getTitle();
-            }
-        }
-
-        $labels = [];
-        foreach ($combinations as $combination) {
-            $labels[(int) $combination->getProductSaleElementsId()][] = $titles[(int) $combination->getAttributeAvId()] ?? '';
-        }
-
-        return array_map(static fn (array $parts): string => implode(' / ', array_filter($parts)), $labels);
     }
 
     /**
@@ -485,7 +448,8 @@ final readonly class SearchRepository
     }
 
     /**
-     * The attribute values of each combination, joined by a slash, in the administrator's language.
+     * The attribute values of each combination, in the order of their attributes and joined by a
+     * slash, each read in $locale, then in $fallbackLocale; a value with no title is left out.
      *
      * @param list<int> $combinationIds
      *
@@ -499,7 +463,7 @@ final readonly class SearchRepository
 
         $parameters = new SqlParameters();
         $rows = $this->rows(
-            'SELECT ac.product_sale_elements_id AS id, GROUP_CONCAT(COALESCE(NULLIF(av_title.title, \'\'), NULLIF(av_fallback.title, \'\'), \'\')'
+            'SELECT ac.product_sale_elements_id AS id, GROUP_CONCAT(COALESCE(NULLIF(av_title.title, \'\'), NULLIF(av_fallback.title, \'\'))'
             .' ORDER BY ac.attribute_id SEPARATOR \' / \') AS label'
             .' FROM `attribute_combination` ac'
             .' LEFT JOIN `attribute_av_i18n` av_title ON av_title.id = ac.attribute_av_id AND av_title.locale = '.$parameters->add($locale)
