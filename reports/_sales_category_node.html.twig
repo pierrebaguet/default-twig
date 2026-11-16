@@ -12,7 +12,7 @@
     <span class="col-6 col-md-2 text-md-end" data-testid="sales-category-revenue"><span class="d-block d-md-none text-muted small">{{ 'Revenue incl. tax'|trans }}</span>{{ row.revenue|format_currency(currency) }}</span>
     <span class="col-6 col-md-2 text-md-end text-muted"><span class="d-block d-md-none small">{{ 'Previous period'|trans }}</span>{{ row.previousRevenue|format_currency(currency) }}</span>
     <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Change'|trans }}</span>{{ sales.variation(node.variation) }}</span>
-    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Quantity'|trans }}</span>{{ row.quantity|number_format(0, ',', ' ') }}</span>
+    <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Quantity'|trans }}</span>{{ row.quantity|format_number({max_fraction_digit: 3}) }}</span>
     <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Orders'|trans }}</span>{{ row.orderCount|number_format(0, ',', ' ') }}</span>
     <span class="col-6 col-md-1 text-md-end"><span class="d-block d-md-none text-muted small">{{ 'Share'|trans }}</span>{{ (row.share * 100)|number_format(1, ',', ' ') }} %</span>
 {% endset %}

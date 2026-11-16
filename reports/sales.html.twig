@@ -221,7 +221,7 @@
                                             {% endif %}
                                             <div class="d-md-none"><code class="small">{{ row.ref }}</code></div>
                                         </td>
-                                        <td class="text-end">{{ row.quantity|number_format(0, ',', ' ') }}</td>
+                                        <td class="text-end">{{ row.quantity|format_number({max_fraction_digit: 3}) }}</td>
                                         <td class="text-end">{{ row.revenue|format_currency(currency) }}</td>
                                         <td class="text-end text-muted d-none d-md-table-cell">{{ row.previousRevenue|format_currency(currency) }}</td>
                                         <td class="text-end">{{ sales.variation(item.variation) }}</td>
