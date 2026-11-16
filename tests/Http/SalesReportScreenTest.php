@@ -15,6 +15,8 @@ declare(strict_types=1);
 namespace BackOfficeDefaultTwigBundle\Tests\Http;
 
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Thelia\Core\Event\Administrator\AdministratorSaleUnitsEvent;
+use Thelia\Core\Event\TheliaEvents;
 use Thelia\Core\Security\AccessManager;
 use Thelia\Core\Security\Resource\AdminResources;
 use Thelia\Model\Admin;
@@ -22,6 +24,7 @@ use Thelia\Model\ConfigQuery;
 use Thelia\Model\Customer;
 use Thelia\Model\ExportQuery;
 use Thelia\Model\OrderStatus;
+use Thelia\Model\SaleUnit;
 use Thelia\Test\FixtureFactory;
 use Thelia\Test\WebIntegrationTestCase;
 use Thelia\Tests\Support\BackOffice\AdminSessionInjector;
@@ -221,6 +224,24 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         self::assertSame('thelia.export.sales_by_category_paid', $this->exportRef(), 'The paid orders on screen, the paid orders in the file.');
     }
 
+    public function testTheFiguresKeptForAnAdministratorAreNotShownToOneOfOtherSaleUnits(): void
+    {
+        $customer = $this->customer('Units'.uniqid());
+        $north = $this->factory->saleUnit();
+        $south = $this->factory->saleUnit();
+        $this->paidOrder($customer, '3000000.000000', 1, '0', (int) $north->getId());
+        $this->paidOrder($customer, '7000000.000000', 1, '0', (int) $south->getId());
+
+        $this->loginAs($this->adminOf($north));
+        $this->assertPageRenders(self::CATEGORY_URL);
+        self::assertSame(300000000, $this->revenue(), 'The orders of its unit only.');
+
+        // Within the minutes the figures are kept, under the same period and orders.
+        $this->loginAs($this->adminOf($south));
+        $this->assertPageRenders(self::CATEGORY_URL);
+        self::assertSame(700000000, $this->revenue(), 'The figures of the other unit are computed for it, not read from the first one.');
+    }
+
     public function testTheFiguresAreKeptUntilAnOrderChangesOrTheyAreComputedAgain(): void
     {
         $customer = $this->customer('Kept'.uniqid());
@@ -262,10 +283,26 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         return $this->factory->customer($this->factory->customerTitle(), ['lastname' => $lastname]);
     }
 
-    private function paidOrder(Customer $customer, string $price, int $quantity, string $postage): void
+    private function paidOrder(Customer $customer, string $price, int $quantity, string $postage, ?int $saleUnitId = null): void
     {
         $order = $this->factory->order($customer, ['statusCode' => OrderStatus::CODE_PAID, 'postage' => $postage]);
+
+        if (null !== $saleUnitId) {
+            $order->setSaleUnitId($saleUnitId)->save($this->getPropelConnection());
+        }
+
         $this->factory->orderProduct($order, ['price' => $price, 'quantity' => $quantity]);
+    }
+
+    private function adminOf(SaleUnit $saleUnit): Admin
+    {
+        $admin = $this->factory->restrictedAdmin([AdminResources::ORDER => [AccessManager::VIEW]]);
+        $this->getService(EventDispatcherInterface::class)->dispatch(
+            new AdministratorSaleUnitsEvent((int) $admin->getId(), [(int) $saleUnit->getId()]),
+            TheliaEvents::ADMINISTRATOR_UPDATE_SALE_UNITS,
+        );
+
+        return $admin;
     }
 
     private function exportRef(): ?string
