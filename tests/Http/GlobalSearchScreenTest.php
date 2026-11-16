@@ -199,11 +199,27 @@ final class GlobalSearchScreenTest extends WebIntegrationTestCase
         $this->product($this->word);
         $this->loginAs($this->factory->admin());
 
-        $page = $this->client->request('GET', '/admin/search?group=products&page='.\PHP_INT_MAX.'&search_term='.$this->word);
+        // The last two are too large for an integer: the group is still shown, empty.
+        foreach ([(string) \PHP_INT_MAX, '99999999999999999999', str_repeat('9', 400)] as $number) {
+            $page = $this->client->request('GET', '/admin/search?group=products&page='.$number.'&search_term='.$this->word);
 
-        self::assertResponseIsSuccessful();
-        self::assertCount(1, $page->filter('[data-testid="search-group-products"] li'));
-        self::assertStringNotContainsString($this->word, $page->filter('[data-testid="search-group-products"] ul')->text());
+            self::assertResponseIsSuccessful();
+            self::assertCount(1, $page->filter('[data-testid="search-group-products"] li'), $number);
+            self::assertStringNotContainsString($this->word, $page->filter('[data-testid="search-group-products"] ul')->text(), $number);
+        }
+    }
+
+    public function testAPageNumberThatIsNotAPositiveNumberShowsTheFirstPage(): void
+    {
+        $this->product($this->word);
+        $this->loginAs($this->factory->admin());
+
+        foreach (['abc', '0', '-3', '1.5', '', '%5B%5D=2'] as $number) {
+            $page = $this->client->request('GET', '/admin/search?group=products&page='.$number.'&search_term='.$this->word);
+
+            self::assertResponseIsSuccessful();
+            self::assertStringContainsString($this->word, $page->filter('[data-testid="search-group-products"] ul')->text(), 'page='.$number);
+        }
     }
 
     public function testATermWithWildcardsQuotesOrMarkupIsShownAsTyped(): void

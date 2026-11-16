@@ -65,10 +65,26 @@ final class SearchController
             $request->getLocale(),
             Lang::getDefaultLanguage()->getLocale(),
             $only,
-            $request->query->getInt('page', 1),
+            $this->pageNumber($request),
         );
 
         return new Response($this->twig->render(self::TEMPLATE, $results));
+    }
+
+    /**
+     * The page asked for, read without ever failing: anything that is not a positive whole number
+     * is the first page, and a number too large for an integer is the largest one, which shows an
+     * empty group like any page past the last.
+     */
+    private function pageNumber(Request $request): int
+    {
+        $page = $request->query->all()['page'] ?? null;
+
+        if (!\is_string($page) || !ctype_digit($page)) {
+            return 1;
+        }
+
+        return \strlen(ltrim($page, '0')) > 18 ? \PHP_INT_MAX : max(1, (int) $page);
     }
 
     private function limiterKey(): ?string
