@@ -61,17 +61,58 @@ final class GlobalSearchTest extends IntegrationTestCase
         self::assertSame([$this->word.'-1', 'A'.$this->word], $this->column($this->find(SearchGroup::Products, $this->word), 'ref'));
     }
 
-    public function testAReferenceTypedInFullComesFirstThenTheReferencesStartingWithIt(): void
+    public function testAReferenceTypedInFullComesFirstThenTheReferencesStartingWithItThenThoseHoldingIt(): void
     {
-        $this->product($this->word.'-1');
+        $this->product('A'.$this->word.'B');
+        $this->product($this->word.'PLUS');
+        $this->product('C'.$this->word, ['title' => 'Chair '.$this->word.' blue']);
         $this->product($this->word);
-        $this->product('A'.$this->word, ['title' => 'Chair '.$this->word]);
 
-        self::assertSame(
-            [$this->word, $this->word.'-1'],
-            $this->column($this->find(SearchGroup::Products, $this->word), 'ref'),
-            'A reference typed in full is looked up through the index: a reference or a title merely holding it is left out.',
-        );
+        $result = $this->find(SearchGroup::Products, $this->word);
+        $refs = $this->column($result, 'ref');
+
+        self::assertSame($this->word, $refs[0]);
+        self::assertSame($this->word.'PLUS', $refs[1]);
+        self::assertSame(['A'.$this->word.'B', 'C'.$this->word], \array_slice($refs, 2, 2), 'Then the references and the titles holding the term, once each.');
+        self::assertCount(4, $refs);
+        self::assertSame(4, $result->total);
+    }
+
+    public function testACombinationReferenceTypedInFullIsFollowedByTheReferencesStartingWithItThenThoseHoldingIt(): void
+    {
+        $product = $this->product('P'.$this->word);
+        foreach (['A'.$this->word.'B', $this->word.'-2', $this->word] as $ref) {
+            $this->factory->productSaleElement($product, ['ref' => $ref]);
+        }
+
+        $result = $this->find(SearchGroup::Combinations, $this->word);
+
+        self::assertSame([$this->word, $this->word.'-2', 'A'.$this->word.'B'], $this->column($result, 'ref'));
+        self::assertSame(3, $result->total);
+    }
+
+    public function testTheRowsHoldingAReferenceTypedInFullFollowThoseStartingWithItAcrossThePages(): void
+    {
+        $this->product($this->word);
+        for ($i = 10; $i < 40; ++$i) {
+            $this->product($this->word.'-'.$i);
+        }
+        for ($i = 10; $i < 20; ++$i) {
+            $this->product('A'.$this->word.'-'.$i);
+        }
+        $term = new SearchTerm($this->word);
+
+        $first = $this->search->find(SearchGroup::Products, $term, 'en_US', 'en_US', 0);
+        $second = $this->search->find(SearchGroup::Products, $term, 'en_US', 'en_US', SearchRepository::DISPLAY_LIMIT);
+
+        self::assertSame(41, $first->total);
+        self::assertSame(41, $second->total);
+        self::assertCount(SearchRepository::DISPLAY_LIMIT, $first->rows);
+        self::assertCount(16, $second->rows);
+        self::assertSame($this->word, $first->rows[0]['ref']);
+        $refs = [...$this->column($first, 'ref'), ...$this->column($second, 'ref')];
+        self::assertCount(41, array_unique($refs), 'No row is shown twice.');
+        self::assertSame(array_fill(0, 10, true), array_map(static fn (string $ref): bool => str_starts_with($ref, 'A'), \array_slice($refs, 31)), 'The rows holding the term come last.');
     }
 
     public function testAReferenceOrAGtinTypedInFullIsLookedUpWithoutScanningTheCatalogue(): void
@@ -88,15 +129,17 @@ final class GlobalSearchTest extends IntegrationTestCase
         $catalogue = 31;
         self::assertGreaterThanOrEqual($catalogue, $this->rowsWalked(fn () => $this->find(SearchGroup::Products, 'F'.$this->word)), 'The measure sees a scan.');
 
+        // The exact match is found through the indexes; the rows that merely hold the term are then read from a scan, after it.
         foreach ([$this->word, $this->word.'-RED', $gtin] as $term) {
-            foreach ([SearchGroup::Products, SearchGroup::Combinations] as $group) {
+            foreach (['productsFoundByReference' => SearchGroup::Products, 'combinationsFoundByReference' => SearchGroup::Combinations] as $lookup => $group) {
                 $rows = [];
-                $walked = $this->rowsWalked(function () use ($group, $term, &$rows): void {
-                    $rows = $this->find($group, $term)->rows;
+                $walked = $this->rowsWalked(function () use ($lookup, $term, &$rows): void {
+                    $rows = (new \ReflectionMethod($this->search, $lookup))->invoke($this->search, new SearchTerm($term), 'en_US', 'en_US', 0)->rows;
                 });
 
                 self::assertNotSame([], $rows, $group->value.' finds '.$term);
                 self::assertLessThan($catalogue, $walked, $group->value.' scans the catalogue for '.$term);
+                self::assertSame($rows[0]['id'], $this->find($group, $term)->rows[0]['id'], $group->value.' lists the exact match first.');
             }
         }
     }
@@ -288,8 +331,9 @@ final class GlobalSearchTest extends IntegrationTestCase
             }
         });
 
-        // Plus the lookup of the term as a whole reference, through the index, by the products and the combinations.
-        self::assertLessThanOrEqual(\count(SearchGroup::cases()) + 2, \count($statements), implode("\n", $statements));
+        // Plus, for the products and the combinations, the lookup of the term as a whole reference through the index,
+        // and the second statement that lists after it the rows holding the term.
+        self::assertLessThanOrEqual(\count(SearchGroup::cases()) + 4, \count($statements), implode("\n", $statements));
     }
 
     /**

@@ -157,42 +157,86 @@ final readonly class SearchRepository
      * title. The row names the combination whose reference matched, when it is not the
      * product's own.
      *
-     * A term that is a reference or a GTIN as a whole is looked up through their indexes only:
-     * the products whose reference, or the reference of a combination, starts with it, and the
-     * product of the GTIN. A term met anywhere in a reference or a title scans the catalogue.
+     * A term that is a reference or a GTIN as a whole is first looked up through their indexes,
+     * which find the exact match and the references starting with it without scanning the
+     * catalogue; the rows that merely hold the term in a reference or a title come after them,
+     * from a scan of the others.
      */
     private function findProducts(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
     {
-        $fromParameters = new SqlParameters();
-        $reference = $this->isReference($term);
-        $joinedTo = $reference ? '('.$this->productsStartingWith($term, $fromParameters).') found JOIN `product` p ON p.id = found.id' : null;
-        [$label, $from, $fromParameters, $title] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
-
-        $select = new SqlParameters();
-        $selectSql = 'p.id AS id, p.ref AS ref, '.$label.' AS label, CASE'
-            .' WHEN p.ref = '.$select->add($term->raw).' OR '.$title.' = '.$select->add($term->raw)
-            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
-            .'v.ref = '.$select->add($term->raw).$this->orGtin('v.ean_code', $term, $select).')) THEN '.self::EXACT
-            .' WHEN '.$select->like('p.ref', $term->prefix).' OR '.$select->like($title, $term->prefix)
-            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND '.$select->like('v.ref', $term->prefix).') THEN '.self::PREFIX
-            .' ELSE 2 END AS score';
-
-        $where = new SqlParameters();
-        // A reference: the rows found through the indexes are joined above, nothing is left to filter.
-        $whereSql = $reference
-            ? 'TRUE'
-            : '('.$where->like('p.ref', $term->contains)
-                .' OR '.$this->titleExists('product', 'p', $term, $where)
-                .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
-                .$where->like('v.ref', $term->contains).$this->orGtin('v.ean_code', $term, $where).')))';
-
-        $result = $this->fetch($selectSql, $select, $from, $fromParameters, $whereSql, $where, 'label, id', $offset);
+        $result = $this->isReference($term)
+            ? $this->followedBy(
+                $this->productsFoundByReference($term, $locale, $fallbackLocale, $offset),
+                $offset,
+                fn (int $restOffset, int $limit): SearchGroupResult => $this->productsHoldingTheTerm($term, $locale, $fallbackLocale, $restOffset, $limit, true),
+            )
+            : $this->productsHoldingTheTerm($term, $locale, $fallbackLocale, $offset, self::DISPLAY_LIMIT, false);
         $matched = $this->matchedCombinations($result->rows, $term);
 
         return new SearchGroupResult(
             array_map(static fn (array $row): array => $row + ['combination_ref' => $matched[(int) $row['id']] ?? null], $result->rows),
             $result->total,
         );
+    }
+
+    /** The products whose reference, or the reference of a combination, starts with the term, or whose combination has it as GTIN: indexes only. */
+    private function productsFoundByReference(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
+    {
+        $fromParameters = new SqlParameters();
+        $joinedTo = '('.$this->productsStartingWith($term, $fromParameters).') found JOIN `product` p ON p.id = found.id';
+        [$label, $from, $fromParameters, $title] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
+
+        // Nothing is left to filter: the rows found through the indexes are joined above.
+        return $this->fetch($this->productScore($term, $label, $title, $select = new SqlParameters()), $select, $from, $fromParameters, 'TRUE', new SqlParameters(), 'label, id', $offset);
+    }
+
+    /**
+     * The products holding the term in their reference, the reference or GTIN of a combination,
+     * or a title. $withoutThoseFoundByReference leaves out the rows productsFoundByReference lists.
+     */
+    private function productsHoldingTheTerm(SearchTerm $term, string $locale, string $fallbackLocale, int $offset, int $limit, bool $withoutThoseFoundByReference): SearchGroupResult
+    {
+        [$label, $from, $fromParameters, $title] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale);
+
+        $where = new SqlParameters();
+        $whereSql = '('.$where->like('p.ref', $term->contains)
+            .' OR '.$this->titleExists('product', 'p', $term, $where)
+            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
+            .$where->like('v.ref', $term->contains).$this->orGtin('v.ean_code', $term, $where).')))';
+
+        if ($withoutThoseFoundByReference) {
+            $whereSql .= ' AND NOT ('.$where->like('p.ref', $term->prefix)
+                .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
+                .$where->like('v.ref', $term->prefix).$this->orGtin('v.ean_code', $term, $where).')))';
+        }
+
+        return $this->fetch($this->productScore($term, $label, $title, $select = new SqlParameters()), $select, $from, $fromParameters, $whereSql, $where, 'label, id', $offset, $limit);
+    }
+
+    /** The columns of a product row and its relevance: 0 for an identifier or a title equal to the term, 1 for one starting with it, 2 otherwise. */
+    private function productScore(SearchTerm $term, string $label, string $title, SqlParameters $select): string
+    {
+        return 'p.id AS id, p.ref AS ref, '.$label.' AS label, CASE'
+            .' WHEN p.ref = '.$select->add($term->raw).' OR '.$title.' = '.$select->add($term->raw)
+            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
+            .'v.ref = '.$select->add($term->raw).$this->orGtin('v.ean_code', $term, $select).')) THEN '.self::EXACT
+            .' WHEN '.$select->like('p.ref', $term->prefix).' OR '.$select->like($title, $term->prefix)
+            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND '.$select->like('v.ref', $term->prefix).') THEN '.self::PREFIX
+            .' ELSE 2 END AS score';
+    }
+
+    /**
+     * The page that starts at $offset of two lists read one after the other: $first, the page of
+     * the first list at that offset with the size of the whole list, then the rows of $rest, which
+     * receives its own offset and the room left on the page.
+     *
+     * @param callable(int, int): SearchGroupResult $rest
+     */
+    private function followedBy(SearchGroupResult $first, int $offset, callable $rest): SearchGroupResult
+    {
+        $second = $rest(max(0, $offset - $first->total), max(0, self::DISPLAY_LIMIT - \count($first->rows)));
+
+        return new SearchGroupResult([...$first->rows, ...$second->rows], $first->total + $second->total);
     }
 
     /**
@@ -237,32 +281,64 @@ final readonly class SearchRepository
      * A combination by its reference or its GTIN, with its product. A combination carrying the
      * reference of its product is the product itself, already in the products group: it is left
      * out, unless its GTIN is what matched. A term that is a reference or a GTIN as a whole is
-     * looked up through their indexes only, as for the products.
+     * first looked up through their indexes, as for the products, the combinations that merely
+     * hold the term coming after.
      */
     private function findCombinations(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
     {
-        $fromParameters = new SqlParameters();
-        $joinedTo = ($this->isReference($term) ? '('.$this->combinationsStartingWith($term, $fromParameters).') found JOIN `product_sale_elements` v ON v.id = found.id' : '`product_sale_elements` v')
-            .' JOIN `product` p ON p.id = v.product_id';
-        [$label, $from, $fromParameters] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
-
-        $select = new SqlParameters();
-        $selectSql = 'v.id AS id, v.ref AS ref, v.ean_code AS ean_code, p.id AS product_id, p.ref AS product_ref, '.$label.' AS label, CASE'
-            .' WHEN v.ref = '.$select->add($term->raw).$this->orGtin('v.ean_code', $term, $select).' THEN '.self::EXACT
-            .' WHEN '.$select->like('v.ref', $term->prefix).' THEN '.self::PREFIX
-            .' ELSE 2 END AS score';
-
-        $where = new SqlParameters();
-        $whereSql = '((v.ref <> p.ref AND '.$where->like('v.ref', $term->contains).')'
-            .$this->orGtin('v.ean_code', $term, $where).')';
-
-        $result = $this->fetch($selectSql, $select, $from, $fromParameters, $whereSql, $where, 'label, ref, id', $offset);
+        $result = $this->isReference($term)
+            ? $this->followedBy(
+                $this->combinationsFoundByReference($term, $locale, $fallbackLocale, $offset),
+                $offset,
+                fn (int $restOffset, int $limit): SearchGroupResult => $this->combinationsHoldingTheTerm($term, $locale, $fallbackLocale, $restOffset, $limit, true),
+            )
+            : $this->combinationsHoldingTheTerm($term, $locale, $fallbackLocale, $offset, self::DISPLAY_LIMIT, false);
         $attributes = $this->attributeLabels(array_map(static fn (array $row): int => (int) $row['id'], $result->rows), $locale, $fallbackLocale);
 
         return new SearchGroupResult(
             array_map(static fn (array $row): array => $row + ['attributes' => $attributes[(int) $row['id']] ?? ''], $result->rows),
             $result->total,
         );
+    }
+
+    /** The combinations whose reference starts with the term, or whose GTIN it is: indexes only. */
+    private function combinationsFoundByReference(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
+    {
+        $fromParameters = new SqlParameters();
+        $joinedTo = '('.$this->combinationsStartingWith($term, $fromParameters).') found JOIN `product_sale_elements` v ON v.id = found.id JOIN `product` p ON p.id = v.product_id';
+        [$label, $from, $fromParameters] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
+
+        $where = new SqlParameters();
+
+        return $this->fetch($this->combinationScore($term, $label, $select = new SqlParameters()), $select, $from, $fromParameters, $this->combinationCondition($term, $where), $where, 'label, ref, id', $offset);
+    }
+
+    /** The combinations holding the term in their reference, or having it as GTIN; $withoutThoseFoundByReference leaves out those combinationsFoundByReference lists. */
+    private function combinationsHoldingTheTerm(SearchTerm $term, string $locale, string $fallbackLocale, int $offset, int $limit, bool $withoutThoseFoundByReference): SearchGroupResult
+    {
+        [$label, $from, $fromParameters] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, '`product_sale_elements` v JOIN `product` p ON p.id = v.product_id');
+
+        $where = new SqlParameters();
+        $whereSql = $this->combinationCondition($term, $where);
+
+        if ($withoutThoseFoundByReference) {
+            $whereSql .= ' AND NOT ('.$where->like('v.ref', $term->prefix).$this->orGtin('v.ean_code', $term, $where).')';
+        }
+
+        return $this->fetch($this->combinationScore($term, $label, $select = new SqlParameters()), $select, $from, $fromParameters, $whereSql, $where, 'label, ref, id', $offset, $limit);
+    }
+
+    private function combinationScore(SearchTerm $term, string $label, SqlParameters $select): string
+    {
+        return 'v.id AS id, v.ref AS ref, v.ean_code AS ean_code, p.id AS product_id, p.ref AS product_ref, '.$label.' AS label, CASE'
+            .' WHEN v.ref = '.$select->add($term->raw).$this->orGtin('v.ean_code', $term, $select).' THEN '.self::EXACT
+            .' WHEN '.$select->like('v.ref', $term->prefix).' THEN '.self::PREFIX
+            .' ELSE 2 END AS score';
+    }
+
+    private function combinationCondition(SearchTerm $term, SqlParameters $where): string
+    {
+        return '((v.ref <> p.ref AND '.$where->like('v.ref', $term->contains).')'.$this->orGtin('v.ean_code', $term, $where).')';
     }
 
     /**
@@ -474,14 +550,15 @@ final readonly class SearchRepository
         SqlParameters $whereParameters,
         string $tieBreak,
         int $offset,
+        int $limit = self::DISPLAY_LIMIT,
     ): SearchGroupResult {
         $rows = $this->rows(
             'SELECT '.$select.' FROM '.$from.' WHERE '.$where
-            .' ORDER BY score, '.$tieBreak.' LIMIT '.$offset.', '.(self::DISPLAY_LIMIT + 1),
+            .' ORDER BY score, '.$tieBreak.' LIMIT '.$offset.', '.($limit + 1),
             [...$selectParameters->values(), ...$fromParameters->values(), ...$whereParameters->values()],
         );
 
-        if (\count($rows) <= self::DISPLAY_LIMIT && 0 === $offset) {
+        if (\count($rows) <= $limit && 0 === $offset) {
             return new SearchGroupResult($rows, \count($rows));
         }
 
@@ -490,7 +567,7 @@ final readonly class SearchRepository
             [...$fromParameters->values(), ...$whereParameters->values()],
         );
 
-        return new SearchGroupResult(\array_slice($rows, 0, self::DISPLAY_LIMIT), (int) ($count[0]['total'] ?? 0));
+        return new SearchGroupResult(\array_slice($rows, 0, $limit), (int) ($count[0]['total'] ?? 0));
     }
 
     /**
