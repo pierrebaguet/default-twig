@@ -194,6 +194,18 @@ final class GlobalSearchScreenTest extends WebIntegrationTestCase
         self::assertStringContainsString($this->word.' brand 39', $second->filter('[data-testid="search-group-brands"]')->text());
     }
 
+    public function testAPagePastAnyRowShowsAnEmptyGroup(): void
+    {
+        $this->product($this->word);
+        $this->loginAs($this->factory->admin());
+
+        $page = $this->client->request('GET', '/admin/search?group=products&page='.\PHP_INT_MAX.'&search_term='.$this->word);
+
+        self::assertResponseIsSuccessful();
+        self::assertCount(1, $page->filter('[data-testid="search-group-products"] li'));
+        self::assertStringNotContainsString($this->word, $page->filter('[data-testid="search-group-products"] ul')->text());
+    }
+
     public function testATermWithWildcardsQuotesOrMarkupIsShownAsTyped(): void
     {
         $this->loginAs($this->factory->admin());

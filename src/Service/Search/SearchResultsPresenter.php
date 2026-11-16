@@ -39,7 +39,8 @@ final readonly class SearchResultsPresenter
             null === $only ? SearchGroup::cases() : [$only],
             fn (SearchGroup $group): bool => $this->access->canView($group->resource()),
         ));
-        $page = null === $only ? 1 : max(1, $page);
+        // Past the last page whose first row still counts in an integer, every page is the same empty one.
+        $page = null === $only ? 1 : max(1, min($page, intdiv(\PHP_INT_MAX, SearchRepository::DISPLAY_LIMIT)));
 
         $results = [
             'term' => $term,
