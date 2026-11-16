@@ -52,20 +52,74 @@ final class GlobalSearchTest extends IntegrationTestCase
         $this->word = 'Q'.strtoupper(bin2hex(random_bytes(4)));
     }
 
-    public function testAnExactReferenceComesFirstThenAReferenceStartingWithTheTermThenAnyOther(): void
+    public function testAReferenceStartingWithTheTermComesBeforeAReferenceHoldingIt(): void
     {
         // Alphabetical order would be the reverse one.
         $this->product('A'.$this->word);
         $this->product($this->word.'-1');
-        $this->product($this->word);
 
-        self::assertSame([$this->word, $this->word.'-1', 'A'.$this->word], $this->column($this->find(SearchGroup::Products, $this->word), 'ref'));
+        self::assertSame([$this->word.'-1', 'A'.$this->word], $this->column($this->find(SearchGroup::Products, $this->word), 'ref'));
+    }
+
+    public function testAReferenceTypedInFullComesFirstThenTheReferencesStartingWithIt(): void
+    {
+        $this->product($this->word.'-1');
+        $this->product($this->word);
+        $this->product('A'.$this->word, ['title' => 'Chair '.$this->word]);
+
+        self::assertSame(
+            [$this->word, $this->word.'-1'],
+            $this->column($this->find(SearchGroup::Products, $this->word), 'ref'),
+            'A reference typed in full is looked up through the index: a reference or a title merely holding it is left out.',
+        );
+    }
+
+    public function testAReferenceOrAGtinTypedInFullIsLookedUpWithoutScanningTheCatalogue(): void
+    {
+        for ($i = 10; $i < 40; ++$i) {
+            $this->product('F'.$this->word.'-'.$i);
+        }
+        $base = '4'.substr(str_pad((string) random_int(0, 99999999999), 11, '0', \STR_PAD_LEFT), 0, 11);
+        $gtin = $base.Gtin::checkDigitOf($base);
+        $product = $this->product($this->word);
+        $this->factory->productSaleElement($product, ['ref' => $this->word.'-RED', 'eanCode' => $gtin]);
+
+        // A scan walks every product of the catalogue; the indexes reach the few rows of the term.
+        $catalogue = 31;
+        self::assertGreaterThanOrEqual($catalogue, $this->rowsWalked(fn () => $this->find(SearchGroup::Products, 'F'.$this->word)), 'The measure sees a scan.');
+
+        foreach ([$this->word, $this->word.'-RED', $gtin] as $term) {
+            foreach ([SearchGroup::Products, SearchGroup::Combinations] as $group) {
+                $rows = [];
+                $walked = $this->rowsWalked(function () use ($group, $term, &$rows): void {
+                    $rows = $this->find($group, $term)->rows;
+                });
+
+                self::assertNotSame([], $rows, $group->value.' finds '.$term);
+                self::assertLessThan($catalogue, $walked, $group->value.' scans the catalogue for '.$term);
+            }
+        }
     }
 
     public function testATruncatedGroupKeepsTheBestRowsAndCountsThemAll(): void
     {
         for ($i = 10; $i < 40; ++$i) {
             $this->product('A'.$this->word.'-'.$i);
+        }
+        $best = $this->product($this->word.'-1');
+
+        $result = $this->find(SearchGroup::Products, $this->word);
+
+        self::assertSame((int) $best->getId(), (int) $result->rows[0]['id'], 'The reference starting with the term, created last, is not cut off by the limit.');
+        self::assertCount(SearchRepository::DISPLAY_LIMIT, $result->rows);
+        self::assertSame(31, $result->total);
+        self::assertTrue($result->isTruncated());
+    }
+
+    public function testATruncatedGroupFoundThroughAReferenceKeepsItFirstAndCountsThemAll(): void
+    {
+        for ($i = 10; $i < 40; ++$i) {
+            $this->product($this->word.'-'.$i);
         }
         $exact = $this->product($this->word);
 
@@ -74,7 +128,6 @@ final class GlobalSearchTest extends IntegrationTestCase
         self::assertSame((int) $exact->getId(), (int) $result->rows[0]['id'], 'The exact reference, created last, is not cut off by the limit.');
         self::assertCount(SearchRepository::DISPLAY_LIMIT, $result->rows);
         self::assertSame(31, $result->total);
-        self::assertTrue($result->isTruncated());
     }
 
     public function testTheGroupIsOnlyCountedWhenItDoesNotFitInOnePage(): void
@@ -225,7 +278,7 @@ final class GlobalSearchTest extends IntegrationTestCase
         self::assertContains('Cheque', $this->column($this->find(SearchGroup::Modules, 'Cheque'), 'code'));
     }
 
-    public function testEveryGroupRunsOneStatementOnATermThatFitsInAPage(): void
+    public function testEveryGroupRunsOneSearchStatementOnATermThatFitsInAPage(): void
     {
         $this->product($this->word);
 
@@ -235,7 +288,32 @@ final class GlobalSearchTest extends IntegrationTestCase
             }
         });
 
-        self::assertLessThanOrEqual(\count(SearchGroup::cases()), \count($statements), implode("\n", $statements));
+        // Plus the lookup of the term as a whole reference, through the index, by the products and the combinations.
+        self::assertLessThanOrEqual(\count(SearchGroup::cases()) + 2, \count($statements), implode("\n", $statements));
+    }
+
+    /**
+     * The rows the database stepped through while $work ran, along an index or a table: a walk
+     * from end to end adds one per row, a lookup by key only the rows it reaches. What reading
+     * the counters costs is measured on no work and taken off.
+     */
+    private function rowsWalked(callable $work): int
+    {
+        $read = function (): int {
+            $counters = $this->getPropelConnection()
+                ->query("SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_next', 'Handler_read_rnd_next')")
+                ->fetchAll(\PDO::FETCH_KEY_PAIR);
+
+            return array_sum(array_map(intval(...), $counters));
+        };
+        $measure = static function (callable $work) use ($read): int {
+            $before = $read();
+            $work();
+
+            return $read() - $before;
+        };
+
+        return $measure($work) - $measure(static function (): void {});
     }
 
     private function find(SearchGroup $group, string $term): SearchGroupResult

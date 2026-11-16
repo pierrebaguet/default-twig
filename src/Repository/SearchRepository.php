@@ -156,10 +156,17 @@ final readonly class SearchRepository
      * A product by its reference, the reference or the GTIN of one of its combinations, or its
      * title. The row names the combination whose reference matched, when it is not the
      * product's own.
+     *
+     * A term that is a reference or a GTIN as a whole is looked up through their indexes only:
+     * the products whose reference, or the reference of a combination, starts with it, and the
+     * product of the GTIN. A term met anywhere in a reference or a title scans the catalogue.
      */
     private function findProducts(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
     {
-        [$label, $from, $fromParameters, $title] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale);
+        $fromParameters = new SqlParameters();
+        $reference = $this->isReference($term);
+        $joinedTo = $reference ? '('.$this->productsStartingWith($term, $fromParameters).') found JOIN `product` p ON p.id = found.id' : null;
+        [$label, $from, $fromParameters, $title] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
 
         $select = new SqlParameters();
         $selectSql = 'p.id AS id, p.ref AS ref, '.$label.' AS label, CASE'
@@ -171,10 +178,13 @@ final readonly class SearchRepository
             .' ELSE 2 END AS score';
 
         $where = new SqlParameters();
-        $whereSql = '('.$where->like('p.ref', $term->contains)
-            .' OR '.$this->titleExists('product', 'p', $term, $where)
-            .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
-            .$where->like('v.ref', $term->contains).$this->orGtin('v.ean_code', $term, $where).')))';
+        // A reference: the rows found through the indexes are joined above, nothing is left to filter.
+        $whereSql = $reference
+            ? 'TRUE'
+            : '('.$where->like('p.ref', $term->contains)
+                .' OR '.$this->titleExists('product', 'p', $term, $where)
+                .' OR EXISTS (SELECT 1 FROM `product_sale_elements` v WHERE v.product_id = p.id AND ('
+                .$where->like('v.ref', $term->contains).$this->orGtin('v.ean_code', $term, $where).')))';
 
         $result = $this->fetch($selectSql, $select, $from, $fromParameters, $whereSql, $where, 'label, id', $offset);
         $matched = $this->matchedCombinations($result->rows, $term);
@@ -226,11 +236,15 @@ final readonly class SearchRepository
     /**
      * A combination by its reference or its GTIN, with its product. A combination carrying the
      * reference of its product is the product itself, already in the products group: it is left
-     * out, unless its GTIN is what matched.
+     * out, unless its GTIN is what matched. A term that is a reference or a GTIN as a whole is
+     * looked up through their indexes only, as for the products.
      */
     private function findCombinations(SearchTerm $term, string $locale, string $fallbackLocale, int $offset): SearchGroupResult
     {
-        [$label, $from, $fromParameters] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, '`product_sale_elements` v JOIN `product` p ON p.id = v.product_id');
+        $fromParameters = new SqlParameters();
+        $joinedTo = ($this->isReference($term) ? '('.$this->combinationsStartingWith($term, $fromParameters).') found JOIN `product_sale_elements` v ON v.id = found.id' : '`product_sale_elements` v')
+            .' JOIN `product` p ON p.id = v.product_id';
+        [$label, $from, $fromParameters] = $this->translatedFrom('product', 'p', 'p.ref', $locale, $fallbackLocale, $joinedTo, $fromParameters);
 
         $select = new SqlParameters();
         $selectSql = 'v.id AS id, v.ref AS ref, v.ean_code AS ean_code, p.id AS product_id, p.ref AS product_ref, '.$label.' AS label, CASE'
@@ -385,14 +399,14 @@ final readonly class SearchRepository
     /**
      * The table joined twice to its translations, in the locale of the administrator and in the
      * fallback locale, and the title read from the first that is not empty, then from any other
-     * language. $joinedTo replaces the table alone when it is reached through another one.
+     * language. $joinedTo replaces the table alone when it is reached through another one, with
+     * the values of its placeholders already in $parameters.
      *
      * @return array{string, string, SqlParameters, string} the title shown, the FROM clause, its parameters, and the
-     *                                                     title in the two languages alone, cheap enough to score every row
+     *                                                      title in the two languages alone, cheap enough to score every row
      */
-    private function translatedFrom(string $table, string $alias, string $untitled, string $locale, string $fallbackLocale, ?string $joinedTo = null): array
+    private function translatedFrom(string $table, string $alias, string $untitled, string $locale, string $fallbackLocale, ?string $joinedTo = null, SqlParameters $parameters = new SqlParameters()): array
     {
-        $parameters = new SqlParameters();
         $from = ($joinedTo ?? '`'.$table.'` '.$alias)
             .' LEFT JOIN `'.$table.'_i18n` '.$alias.'_title ON '.$alias.'_title.id = '.$alias.'.id AND '.$alias.'_title.locale = '.$parameters->add($locale)
             .' LEFT JOIN `'.$table.'_i18n` '.$alias.'_fallback ON '.$alias.'_fallback.id = '.$alias.'.id AND '.$alias.'_fallback.locale = '.$parameters->add($fallbackLocale);
@@ -411,6 +425,38 @@ final readonly class SearchRepository
     {
         return 'EXISTS (SELECT 1 FROM `'.$table.'_i18n` '.$alias.'_match WHERE '.$alias.'_match.id = '.$alias.'.id AND '
             .$parameters->like($alias.'_match.title', $term->contains).')';
+    }
+
+    /**
+     * True when the term is the reference of a product or of a combination, or the GTIN of a
+     * combination, as a whole: three lookups an index answers, run before any scan.
+     */
+    private function isReference(SearchTerm $term): bool
+    {
+        $parameters = new SqlParameters();
+        $sql = 'SELECT 1 FROM `product` WHERE ref = '.$parameters->add($term->raw)
+            .' UNION ALL SELECT 1 FROM `product_sale_elements` WHERE ref = '.$parameters->add($term->raw);
+
+        if (null !== $term->gtin) {
+            $sql .= ' UNION ALL SELECT 1 FROM `product_sale_elements` WHERE ean_code = '.$parameters->add($term->gtin);
+        }
+
+        return [] !== $this->rows($sql.' LIMIT 1', $parameters->values());
+    }
+
+    /** The ids of the products whose reference or a combination's starts with the term, or whose combination has it as GTIN. */
+    private function productsStartingWith(SearchTerm $term, SqlParameters $parameters): string
+    {
+        return 'SELECT id FROM `product` WHERE '.$parameters->like('ref', $term->prefix)
+            .' UNION SELECT product_id FROM `product_sale_elements` WHERE '.$parameters->like('ref', $term->prefix)
+            .(null === $term->gtin ? '' : ' UNION SELECT product_id FROM `product_sale_elements` WHERE ean_code = '.$parameters->add($term->gtin));
+    }
+
+    /** The ids of the combinations whose reference starts with the term, or whose GTIN it is. */
+    private function combinationsStartingWith(SearchTerm $term, SqlParameters $parameters): string
+    {
+        return 'SELECT id FROM `product_sale_elements` WHERE '.$parameters->like('ref', $term->prefix)
+            .(null === $term->gtin ? '' : ' UNION SELECT id FROM `product_sale_elements` WHERE ean_code = '.$parameters->add($term->gtin));
     }
 
     /** An exact GTIN comparison added to a condition when the term reads as a GTIN, nothing otherwise. */
