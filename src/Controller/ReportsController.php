@@ -83,12 +83,9 @@ final class ReportsController
 
     private function sales(string $tab, Request $request): Response
     {
-        if ($denied = $this->access->check(AdminResources::ORDER, [], AccessManager::VIEW)) {
-            return $denied;
-        }
-
-        // The customers are personal data: their tab follows the customer permission.
-        if (SalesReportProvider::TAB_CUSTOMER === $tab && ($denied = $this->access->check(AdminResources::CUSTOMER, [], AccessManager::VIEW))) {
+        // The customers are personal data: their tab follows the customer permission alone, the
+        // other tabs the order permission.
+        if ($denied = $this->access->check(SalesReportProvider::resourceOf($tab), [], AccessManager::VIEW)) {
             return $denied;
         }
 

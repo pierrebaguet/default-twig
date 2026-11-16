@@ -95,6 +95,15 @@ final readonly class SalesReportProvider
     ) {
     }
 
+    /**
+     * The permission a tab is read with: the customers are personal data, the other tabs are
+     * the sales of the orders.
+     */
+    public static function resourceOf(string $tab): string
+    {
+        return self::TAB_CUSTOMER === $tab ? AdminResources::CUSTOMER : AdminResources::ORDER;
+    }
+
     public static function routeOf(string $tab): string
     {
         return self::ROUTES[$tab];
@@ -254,7 +263,7 @@ final readonly class SalesReportProvider
 
         $tabs = [];
         foreach ($labels as $key => $label) {
-            if (self::TAB_CUSTOMER === $key && !$this->canView(AdminResources::CUSTOMER)) {
+            if (!$this->canView(self::resourceOf($key))) {
                 continue;
             }
 

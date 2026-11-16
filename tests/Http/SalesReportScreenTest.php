@@ -150,9 +150,26 @@ final class SalesReportScreenTest extends WebIntegrationTestCase
         self::assertSame(403, $this->client->getResponse()->getStatusCode());
     }
 
-    public function testAnAdministratorWhoCannotSeeTheOrdersIsRefused(): void
+    public function testTheCustomerPermissionAloneReadsTheCustomerTabOnly(): void
     {
         $this->loginAs($this->factory->restrictedAdmin([AdminResources::CUSTOMER => [AccessManager::VIEW]]));
+
+        $this->assertPageRenders(self::CUSTOMER_URL);
+        $crawler = $this->client->getCrawler();
+        self::assertCount(1, $crawler->filter('[data-testid="report-tab-customer"]'));
+        self::assertCount(0, $crawler->filter('[data-testid="report-tab-category"]'));
+        self::assertCount(0, $crawler->filter('[data-testid="report-tab-product"]'));
+        self::assertStringEndsWith(self::CUSTOMER_URL, (string) $crawler->filter('[data-testid="bo-nav-sales-report"]')->attr('href'), 'The menu leads to the tab the administrator reads.');
+
+        foreach ([self::CATEGORY_URL, self::PRODUCT_URL] as $url) {
+            $this->client->request('GET', $url);
+            self::assertSame(403, $this->client->getResponse()->getStatusCode(), $url);
+        }
+    }
+
+    public function testWithoutTheOrderAndCustomerPermissionsTheScreenIsRefused(): void
+    {
+        $this->loginAs($this->factory->restrictedAdmin([AdminResources::PRODUCT => [AccessManager::VIEW]]));
 
         foreach ([self::CATEGORY_URL, self::PRODUCT_URL, self::CUSTOMER_URL] as $url) {
             $this->client->request('GET', $url);
